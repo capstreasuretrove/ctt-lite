@@ -202,6 +202,20 @@ main { padding: 1.25rem; }
 }
 .icon-btn:hover { background: #fde8e8; }
 
+.add-btn {
+  color: white;
+  background: var(--navy);
+  font-weight: 700;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.add-btn:hover { background: var(--red); }
+
 .inv-scroll {
   height: 60vh;
   min-height: 320px;

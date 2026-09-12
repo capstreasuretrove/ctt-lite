@@ -362,6 +362,13 @@ function buildAddRowEl() {
   container.innerHTML = "";
   container.style.gridTemplateColumns = COLUMNS.map((c) => c.width).join(" ") + " 2.2rem";
 
+  const handleEnter = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveAddRow();
+    }
+  };
+
   for (const col of COLUMNS) {
     const cell = document.createElement("div");
     cell.className = "inv-td";
@@ -381,31 +388,36 @@ function buildAddRowEl() {
       input.className = "inv-input";
       if (col.key === "line") input.setAttribute("list", "line-datalist");
       if (col.key === "license") input.setAttribute("list", "license-datalist");
+      // Nothing saves until Enter or the + button — just tracks the draft
+      // as you type across as many fields as you want, in any order.
       input.addEventListener("input", () => {
         addRowDraft[col.key] = input.value;
-        if (col.key === "name") debouncedSaveAddRow();
       });
+      input.addEventListener("keydown", handleEnter);
       cell.appendChild(input);
     }
     container.appendChild(cell);
   }
-  const spacer = document.createElement("div");
-  spacer.className = "inv-td";
-  container.appendChild(spacer);
-}
 
-const debouncedSaveAddRow = debounce(saveAddRow, 600);
+  const actionsCell = document.createElement("div");
+  actionsCell.className = "inv-td inv-actions";
+  const addBtn = document.createElement("button");
+  addBtn.className = "icon-btn add-btn";
+  addBtn.textContent = "+";
+  addBtn.title = "Add item (or press Enter in any field)";
+  addBtn.addEventListener("click", () => saveAddRow());
+  actionsCell.appendChild(addBtn);
+  container.appendChild(actionsCell);
+}
 
 async function saveAddRow() {
   if (addRowSaving) return;
-  if (isEmpty(addRowDraft.name)) return;
+  if (isEmpty(addRowDraft.name)) {
+    showError("Enter a name before adding the item.");
+    return;
+  }
   addRowSaving = true;
   const draftCopy = { ...addRowDraft };
-  // Clear the visible add row immediately so the next item can be typed
-  // while this one saves in the background (simplified version of the
-  // desktop app's "spawn a fresh blank row" behavior).
-  addRowDraft = blankDraft();
-  buildAddRowEl();
   try {
     const res = await postToAppsScript(CONFIG.INVENTORY_SCRIPT_URL, {
       action: "addInventoryItems",
@@ -413,6 +425,10 @@ async function saveAddRow() {
     });
     const saved = res.items && res.items[0] ? normalizeItem(res.items[0]) : normalizeItem({ ...draftCopy, id: draftCopy.id || `temp-${Date.now()}` });
     items.push(saved);
+    // Only clear the row once the save actually succeeds — on failure the
+    // typed data stays put so nothing is lost and you can just retry.
+    addRowDraft = blankDraft();
+    buildAddRowEl();
     populateFilterOptions();
     applyFiltersAndSort();
   } catch (err) {

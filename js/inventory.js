@@ -310,9 +310,14 @@ async function handleFieldEdit(item, key, value) {
   item[key] = value;
   if (key === "owner" || key === "line") populateFilterOptions();
   try {
+    // Confirmed against the live Apps Script (2026-09-12): updateInventoryItems
+    // reads each item as { id, fields: {...} } — changed fields must be nested
+    // under `fields`, not sent flat. A flat payload still matches the row by
+    // id (so the script reports success) but writes nothing, which is exactly
+    // the silent-failure bug this fixes.
     await postToAppsScript(CONFIG.INVENTORY_SCRIPT_URL, {
       action: "updateInventoryItems",
-      items: [{ id: item.id, [key]: value }],
+      items: [{ id: item.id, fields: { [key]: value } }],
     });
   } catch (err) {
     item[key] = previous; // roll back optimistic edit
@@ -429,11 +434,17 @@ async function saveAddRow() {
   addRowSaving = true;
   const draftCopy = { ...addRowDraft };
   try {
+    // Confirmed against the live Apps Script (2026-09-12): addInventoryItems
+    // responds with { ok, added, ids: [...] } — NOT an echoed `items` array.
+    // Using the real id here matters a lot: any edit made right after adding
+    // an item was previously keying off a made-up local id that didn't exist
+    // in the Sheet, so it would silently fail exactly like the edit bug.
     const res = await postToAppsScript(CONFIG.INVENTORY_SCRIPT_URL, {
       action: "addInventoryItems",
       items: [draftCopy],
     });
-    const saved = res.items && res.items[0] ? normalizeItem(res.items[0]) : normalizeItem({ ...draftCopy, id: draftCopy.id || `temp-${Date.now()}` });
+    const realId = res.ids && res.ids[0] ? res.ids[0] : `temp-${Date.now()}`;
+    const saved = normalizeItem({ ...draftCopy, id: realId });
     items.push(saved);
     // Only clear the row once the save actually succeeds — on failure the
     // typed data stays put so nothing is lost and you can just retry.

@@ -18,6 +18,7 @@ function initTabs() {
 function onAuthed() {
   initTabs();
   initInventory();
+  initConsignment();
 }
 
 document.addEventListener("DOMContentLoaded", () => {

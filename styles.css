@@ -222,3 +222,36 @@ main { padding: 1.25rem; }
   overflow-y: auto;
   position: relative;
 }
+
+/* ---------- Consignment ---------- */
+.con-th-static {
+  cursor: default;
+}
+.con-th-static:hover {
+  background: var(--navy);
+}
+.con-summary {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+}
+.con-summary-title {
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 0.4rem;
+}
+.con-summary-lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  color: var(--text-muted);
+}
+.con-summary-note {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--red);
+  font-size: 0.8rem;
+}

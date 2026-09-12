@@ -38,11 +38,21 @@
 //     matter the key casing or value type tried (shipped/Shipped, true,
 //     "TRUE", "Yes" all returned { ok: true } with no actual change). This
 //     matches the desktop app's own tooltip noting Shipped was never wired
-//     up to write back. Fixing it needs an Apps Script change (adding a
-//     writable "shipped" column mapping to updateConsignmentOrders) that
-//     can't be done from here without seeing that function's source — so
-//     the toggle below is shown but disabled rather than silently no-oping
-//     the way the old Inventory edit bug did.
+//     up to write back. Per Brody (2026-09-12): skip it — the Shipped
+//     column is left out of this UI entirely rather than shown disabled.
+//   - createConvention needs a NESTED object under a `convention` key —
+//     confirmed live 2026-09-12: `{ action: "createConvention", tabName }`
+//     (and other flat/differently-keyed variants) all failed with "Cannot
+//     read properties of undefined (reading 'tabName')"; the working shape
+//     is `{ action: "createConvention", convention: { tabName, convention,
+//     dateAttending, dueDate } }` → `{ ok: true, tabName }`. It creates a
+//     brand-new sheet tab (always the standard 9-column schema) AND adds
+//     the matching row to the summary tab in one call. A duplicate tab name
+//     comes back as `{ ok: false, error: 'A tab named "X" already exists' }`
+//     — friendly enough to surface directly. Verified live with two
+//     disposable test conventions (ZZZ-TEST-26, ZZZ-TEST2-26) — Brody is
+//     deleting those two tabs by hand from the Sheet since there's no
+//     delete-convention action to clean them up through the API.
 
 let conventions = [];
 let currentTabName = "";
@@ -118,6 +128,15 @@ async function fetchGvizRows(sheetId, opts = {}) {
   );
 }
 
+/** Parse the sheet's M/D/YYYY display string into a sortable timestamp.
+ * Falls back to 0 (sorts last among newest-first) for anything unparseable
+ * so a blank/odd date never throws off the rest of the list. */
+function parseConventionDate(str) {
+  if (!str) return 0;
+  const t = new Date(str).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
 async function loadConventions() {
   showConsignmentLoading(true, "Loading conventions…");
   try {
@@ -134,7 +153,9 @@ async function loadConventions() {
         totalCost: r[6] || "",
         admissionCost: r[7] || "",
       }))
-      .filter((c) => c.convention && c.tabName);
+      .filter((c) => c.convention && c.tabName)
+      // Newest to oldest by Date Attending, per Brody's request (2026-09-12).
+      .sort((a, b) => parseConventionDate(b.dateAttending) - parseConventionDate(a.dateAttending));
     populateConventionPicker();
     showConsignmentLoading(false);
   } catch (err) {
@@ -206,7 +227,7 @@ function renderConsignmentSummary() {
 }
 
 function gridTemplate() {
-  return currentColumns.map((c) => CONSIGNMENT_COLUMN_WIDTHS[c.key] || "1fr").join(" ") + " 4.5rem 2.2rem";
+  return currentColumns.map((c) => CONSIGNMENT_COLUMN_WIDTHS[c.key] || "1fr").join(" ") + " 2.2rem";
 }
 
 function buildConsignmentHeaderEl() {
@@ -220,10 +241,6 @@ function buildConsignmentHeaderEl() {
     cell.textContent = col.label;
     header.appendChild(cell);
   }
-  const shippedCell = document.createElement("div");
-  shippedCell.className = "inv-th con-th-static";
-  shippedCell.textContent = "Shipped";
-  header.appendChild(shippedCell);
   header.appendChild(document.createElement("div")).className = "inv-th";
 }
 
@@ -243,16 +260,6 @@ function buildOrderRowEl(item) {
     cell.appendChild(input);
     row.appendChild(cell);
   }
-
-  const shippedCell = document.createElement("div");
-  shippedCell.className = "inv-td";
-  const shippedInput = document.createElement("input");
-  shippedInput.type = "checkbox";
-  shippedInput.checked = Boolean(item.shipped);
-  shippedInput.disabled = true;
-  shippedInput.title = "Not wired up on the backend yet — see the plan doc. Toggling here wouldn't actually save.";
-  shippedCell.appendChild(shippedInput);
-  row.appendChild(shippedCell);
 
   const actionsCell = document.createElement("div");
   actionsCell.className = "inv-td inv-actions";
@@ -331,10 +338,6 @@ function buildAddOrderRowEl() {
     container.appendChild(cell);
   }
 
-  const shippedCell = document.createElement("div");
-  shippedCell.className = "inv-td";
-  container.appendChild(shippedCell);
-
   const actionsCell = document.createElement("div");
   actionsCell.className = "inv-td inv-actions";
   const addBtn = document.createElement("button");
@@ -398,7 +401,114 @@ function bindConsignmentToolbar() {
   });
 }
 
+// ---------- New Convention ----------
+//
+// Tab-name suggestion algorithm per the port guide: initials of the
+// convention name (skipping small connector words), capped at 6 chars,
+// plus the last 2 digits of the year in Date Attending if present.
+// Editable — the suggestion stops updating the moment the user types into
+// the Tab Name field themselves.
+
+let newTabNameManuallyEdited = false;
+
+/** "YYYY-MM-DD" (native <input type=date> value) -> "M/D/YYYY" (no leading
+ * zeros), matching the format already used throughout the sheet. */
+function formatDateForSheet(isoDate) {
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-").map(Number);
+  if (!y || !m || !d) return "";
+  return `${m}/${d}/${y}`;
+}
+
+function suggestTabName(conventionName, isoDateAttending) {
+  const skipWords = new Set(["of", "the", "and", "in", "at", "for", "&"]);
+  const words = (conventionName || "").trim().split(/\s+/).filter(Boolean);
+  let initials = "";
+  for (const w of words) {
+    const clean = w.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!clean || skipWords.has(clean)) continue;
+    initials += clean[0].toUpperCase();
+  }
+  initials = initials.slice(0, 6);
+  const year = isoDateAttending ? isoDateAttending.slice(0, 4) : "";
+  const yearSuffix = /^\d{4}$/.test(year) ? year.slice(-2) : "";
+  return yearSuffix ? `${initials}-${yearSuffix}` : initials;
+}
+
+function updateTabNameSuggestion() {
+  if (newTabNameManuallyEdited) return;
+  const name = document.getElementById("con-new-name").value;
+  const dateAttending = document.getElementById("con-new-date-attending").value;
+  // Programmatic assignment (not user typing), so this doesn't itself
+  // trigger the tab-name input's own "manually edited" listener.
+  document.getElementById("con-new-tabname").value = suggestTabName(name, dateAttending);
+}
+
+function resetNewConventionForm() {
+  document.getElementById("con-new-name").value = "";
+  document.getElementById("con-new-date-attending").value = "";
+  document.getElementById("con-new-due-date").value = "";
+  document.getElementById("con-new-tabname").value = "";
+  newTabNameManuallyEdited = false;
+}
+
+async function saveNewConvention() {
+  const name = document.getElementById("con-new-name").value.trim();
+  const tabName = document.getElementById("con-new-tabname").value.trim();
+  const dateAttendingIso = document.getElementById("con-new-date-attending").value;
+  const dueDateIso = document.getElementById("con-new-due-date").value;
+  if (!name || !tabName) {
+    showConsignmentError("Enter a convention name and a tab name before creating.");
+    return;
+  }
+  try {
+    // Confirmed live 2026-09-12 — see the createConvention notes at the top
+    // of this file: the payload must be nested under a `convention` key.
+    await postToAppsScript(CONFIG.CONSIGNMENT_SCRIPT_URL, {
+      action: "createConvention",
+      convention: {
+        tabName,
+        convention: name,
+        dateAttending: formatDateForSheet(dateAttendingIso),
+        dueDate: formatDateForSheet(dueDateIso),
+      },
+    });
+    document.getElementById("con-new-form").hidden = true;
+    resetNewConventionForm();
+    await loadConventions();
+    document.getElementById("con-picker").value = tabName;
+    await loadTab(tabName);
+  } catch (err) {
+    // Duplicate-tab-name errors from the backend read fine as-is, e.g.
+    // `A tab named "X" already exists` — no need to reword them.
+    showConsignmentError(`Couldn't create the convention: ${err.message}`);
+  }
+}
+
+function bindNewConventionForm() {
+  const nameInput = document.getElementById("con-new-name");
+  const dateInput = document.getElementById("con-new-date-attending");
+  const tabNameInput = document.getElementById("con-new-tabname");
+
+  nameInput.addEventListener("input", updateTabNameSuggestion);
+  dateInput.addEventListener("input", updateTabNameSuggestion);
+  tabNameInput.addEventListener("input", () => {
+    newTabNameManuallyEdited = true;
+  });
+
+  document.getElementById("con-new-btn").addEventListener("click", () => {
+    document.getElementById("con-new-form").hidden = false;
+    nameInput.focus();
+  });
+  document.getElementById("con-new-cancel").addEventListener("click", () => {
+    document.getElementById("con-new-form").hidden = true;
+    resetNewConventionForm();
+  });
+  document.getElementById("con-new-save").addEventListener("click", saveNewConvention);
+}
+
 function initConsignment() {
   bindConsignmentToolbar();
+  bindNewConventionForm();
   loadConventions();
 }

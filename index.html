@@ -66,7 +66,21 @@
       <div class="inv-toolbar">
         <select id="con-picker" class="toolbar-input" style="flex:1; min-width:220px;"></select>
         <span id="con-count" class="inv-count"></span>
+        <button id="con-new-btn" class="secondary-btn">+ New Convention</button>
         <button id="con-refresh" class="secondary-btn">↻ Refresh</button>
+      </div>
+
+      <div id="con-new-form" class="con-new-form" hidden>
+        <div class="con-new-fields">
+          <label>Convention name<input type="text" id="con-new-name" class="toolbar-input" placeholder="e.g. Monster Mania 67" /></label>
+          <label>Date attending<input type="date" id="con-new-date-attending" class="toolbar-input" /></label>
+          <label>Due date<input type="date" id="con-new-due-date" class="toolbar-input" /></label>
+          <label>Tab name<input type="text" id="con-new-tabname" class="toolbar-input" placeholder="auto-suggested" /></label>
+        </div>
+        <div class="con-new-actions">
+          <button id="con-new-save" class="secondary-btn con-new-save-btn">Create</button>
+          <button id="con-new-cancel" class="secondary-btn">Cancel</button>
+        </div>
       </div>
 
       <div id="con-summary" class="con-summary" hidden></div>

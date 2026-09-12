@@ -4,6 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>CTT Lite</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="256x256" href="assets/favicon-256.png" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -11,7 +14,7 @@
 <!-- Password gate -->
 <div id="auth-gate" class="auth-gate">
   <form id="auth-form" class="auth-box">
-    <h1>🏴‍☠️ CTT Lite</h1>
+    <img src="assets/logo.png" alt="Captain's Treasure Trove" class="auth-logo" />
     <p>This is a private tool — enter the password to continue.</p>
     <input type="password" id="auth-password" placeholder="Password" autofocus />
     <p id="auth-error" class="auth-error" hidden>Wrong password.</p>
@@ -22,7 +25,7 @@
 <!-- Main app -->
 <div id="app" hidden>
   <header class="topbar">
-    <div class="brand">🏴‍☠️ CTT Lite</div>
+    <div class="brand"><img src="assets/logo.png" alt="Captain's Treasure Trove" class="brand-logo" /></div>
     <nav class="tabs">
       <button class="tab-btn active" data-tab="inventory">Inventory</button>
       <button class="tab-btn" data-tab="consignment">Consignment</button>
@@ -98,6 +101,8 @@
 
       <div class="inv-toolbar">
         <button id="ebay-settings-btn" class="secondary-btn">⚙ Settings</button>
+        <button id="ebay-generate-all-btn" class="secondary-btn">⚡ Generate Listings</button>
+        <button id="ebay-upload-all-btn" class="primary-btn">📤 Upload All Listings</button>
         <span id="ebay-count" class="inv-count"></span>
         <button id="ebay-clear-posted-btn" class="secondary-btn">Clear posted</button>
       </div>

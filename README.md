@@ -20,13 +20,20 @@ Both are saved only in your browser's local storage and sent only to eBay/imgBB 
 
 If you ever need to change a config value later: `js/config.js` is a plain text file — on a Mac, right-click it → Open With → TextEdit (avoid double-clicking, which can try to run it instead of opening it as text).
 
+## eBay flow (matches the desktop app)
+
+1. **Add items** in the grid — name, price, template, etc., one row per listing.
+2. **⚡ Generate Listings** (toolbar) — generates a title and description for every listing at once. Re-run it anytime; it skips anything already Listed and respects any title/description you've hand-edited (won't clobber those).
+3. Open a listing's card to **add photos** and review/tweak the generated text, template-specific fields, price, condition, etc.
+4. **Post it** either individually (the card's own **Verify with eBay** / **Post Live** buttons — one listing at a time) or all together (toolbar's **📤 Upload All Listings** — posts every not-yet-Listed listing in one pass and reports how many succeeded/failed).
+
 ## Before you trust the eBay module with a real listing
 
 Every other module in this app was confirmed against your live data before being handed off. eBay is the one exception — posting a real listing is public and can't be tested the same safe, reversible way a Sheet row can. So:
 
 1. Build a test listing in the grid, open its card, add a photo, hit **Generate**.
 2. Click **Verify with eBay** first (calls eBay's `VerifyAddItem` — validates without publishing anything). If it comes back with an error, that's expected on a first try — eBay's XML schema is strict, and the XML builder here was reconstructed from documented field names/constants, not your literal source code. Paste me the error and I'll fix it.
-3. Only use **Post Live** once Verify succeeds. It asks for confirmation every time since it's real and public.
+3. Only use **Post Live** (or **Upload All Listings** once you trust it) after Verify succeeds on at least one listing. Posting always asks for confirmation first since it's real and public.
 
 ## What's here vs. not
 
@@ -34,7 +41,7 @@ Every other module in this app was confirmed against your live data before being
 
 **Consignment**: convention picker (newest-to-oldest), per-convention summary, dynamic order grid (adapts to each tab's actual columns), inline edit/add/delete, **+ New Convention**. Shipped-toggle write-back is left out — confirmed the backend doesn't support it yet, and you asked to skip it for now.
 
-**eBay**: grid of listing drafts → open a card per listing for template-specific fields, photos (drag-and-drop, up to 11 + your CTT store photo auto-appended), title/description generation (Common/Exclusive/Limited Edition/Signed templates, matching your current title-suffix/protector/multi-quantity preferences), Verify/Post via your real proxy. Listings live in this browser's storage only (no Sheet involved, per the original design). Not included: Mercari/Facebook Marketplace exports (scoped out — just eBay for now).
+**eBay**: grid of listing drafts → bulk **Generate Listings** → open a card per listing for template-specific fields, photos (drag-and-drop, up to 11 + your CTT store photo auto-appended) → Verify/Post individually or **Upload All Listings** in bulk, via your real proxy. Title/description generation covers Common/Exclusive/Limited Edition/Signed templates, matching your current title-suffix/protector/multi-quantity preferences. Listings live in this browser's storage only (no Sheet involved, per the original design). Not included: Mercari/Facebook Marketplace exports (scoped out — just eBay for now).
 
 **New**: a "🔍 Look up from Inventory" search bar above the eBay grid — type a partial name (e.g. "Venompool"), pick the match, and it creates a new listing pre-filled with Name/#/Line/License and opens its card right away. The same search box also appears inside each listing's card, so you can re-search and overwrite those fields on a listing you already started (handy if you picked the wrong item or need to fix a typo). This is separate from the quieter autofill that already ran in the background during Generate — that one only fills in blank fields; this one is the deliberate "grab the whole record" version.
 

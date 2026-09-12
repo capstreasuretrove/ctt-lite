@@ -6,6 +6,17 @@
 // (Stage 2) is where template-specific fields, photos, title/description
 // generation, and posting to eBay actually happen.
 //
+// Matches the desktop app's overall flow (added 2026-09-12, per Brody's
+// request): Add rows in the grid (name/price/template/etc.) → toolbar
+// "⚡ Generate Listings" bulk-generates titles/descriptions for every
+// not-yet-Listed row at once → open each card to add photos and tweak
+// anything → post either individually (the card's own Verify/Post Live
+// buttons, for one listing at a time) or all together (toolbar's
+// "📤 Upload All Listings", which posts every remaining listing in one
+// sequential pass and reports a pass/fail summary). Both the per-card and
+// bulk posting paths share one network core (`postSingleListing`) so they
+// can't drift apart.
+//
 // ARCHITECTURE NOTES:
 //   - No backend of its own — listing records live in this browser's
 //     localStorage (per the port guide's own porting considerations: a
@@ -1000,6 +1011,24 @@ function addPhotoFiles(listing, files) {
   renderCard();
 }
 
+/** Core network step shared by the individual Verify/Post buttons (on an
+ * open card) and the toolbar's bulk "Upload All Listings" action. Mutates
+ * `listing` in place on success (status/ebayItemId) but does NOT save,
+ * confirm, or touch the UI — callers own that so a bulk run can show its
+ * own progress/summary instead of one banner per item. */
+async function postSingleListing(listing, isRealPost, settings) {
+  autofillFromInventory(listing);
+  runGeneration(listing);
+  const photoUrls = await resolvePhotoUrls(listing, settings.imgbbKey || "");
+  const xml = buildEbayXml(listing, photoUrls, settings.authToken, isRealPost ? "AddItemRequest" : "VerifyAddItemRequest");
+  const result = await callEbayProxy(xml, isRealPost ? "AddItem" : "VerifyAddItem");
+  if (result.success && isRealPost) {
+    listing.status = "Listed";
+    listing.ebayItemId = result.itemId;
+  }
+  return result;
+}
+
 async function handlePostOrVerify(listing, isRealPost) {
   const settings = getEbaySettings();
   if (!settings.authToken) {
@@ -1015,21 +1044,10 @@ async function handlePostOrVerify(listing, isRealPost) {
   hideEbayBanner();
   showEbayInfo(isRealPost ? "Posting to eBay…" : "Verifying with eBay…");
   try {
-    autofillFromInventory(listing);
-    runGeneration(listing);
-    const photoUrls = await resolvePhotoUrls(listing, settings.imgbbKey || "");
-    const xml = buildEbayXml(listing, photoUrls, settings.authToken, isRealPost ? "AddItemRequest" : "VerifyAddItemRequest");
-    const result = await callEbayProxy(xml, isRealPost ? "AddItem" : "VerifyAddItem");
+    const result = await postSingleListing(listing, isRealPost, settings);
     if (!result.success) {
       showEbayError(`eBay rejected this ${isRealPost ? "listing" : "verify check"}: ${result.message}`);
-      saveListings();
-      renderEbayRows();
-      renderCard();
-      return;
-    }
-    if (isRealPost) {
-      listing.status = "Listed";
-      listing.ebayItemId = result.itemId;
+    } else if (isRealPost) {
       showEbayInfo(`Posted! eBay item ${result.itemId}.`);
     } else {
       showEbayInfo("Verified — eBay accepted this listing as valid. Ready to Post Live when you are.");
@@ -1039,6 +1057,82 @@ async function handlePostOrVerify(listing, isRealPost) {
     renderCard();
   } catch (err) {
     showEbayError(`Couldn't reach eBay: ${err.message}`);
+    saveListings();
+    renderEbayRows();
+    renderCard();
+  }
+}
+
+// ---------- Bulk toolbar actions (Generate Listings / Upload All Listings) ----------
+
+/** Mimics the desktop app's "Generate Listings" button: runs generation
+ * (title/description, respecting each field's manual-edit lock) across
+ * every listing in the grid at once, so the usual flow is add rows for
+ * everything first, generate them all in one click, then open each card
+ * just to add photos and review/tweak before posting. Skips listings
+ * already Listed — a live listing's text shouldn't change underneath it. */
+function handleGenerateAllListings() {
+  const candidates = listings.filter((l) => l.status !== "Listed");
+  if (!candidates.length) {
+    showEbayInfo(listings.length ? "Every listing here is already posted — nothing left to generate." : "No listings yet — add some in the grid below first.");
+    return;
+  }
+  for (const listing of candidates) {
+    autofillFromInventory(listing);
+    runGeneration(listing);
+  }
+  saveListings();
+  renderEbayRows();
+  renderCard();
+  showEbayInfo(`Generated titles & descriptions for ${candidates.length} listing${candidates.length === 1 ? "" : "s"}. Open each to add photos and review before posting.`);
+}
+
+/** Mimics the desktop app's bulk "Upload all listings" action: posts every
+ * not-yet-Listed listing to eBay in one go (as opposed to the per-card
+ * "Post Live" button, for posting just one at a time). Runs sequentially
+ * so progress can be shown and one listing's failure doesn't abort the
+ * rest; reports a summary at the end. */
+async function handleUploadAllListings() {
+  const settings = getEbaySettings();
+  if (!settings.authToken) {
+    showEbayError("Add your eBay auth token in Settings first.");
+    return;
+  }
+  const candidates = listings.filter((l) => l.status !== "Listed");
+  if (!candidates.length) {
+    showEbayInfo(listings.length ? "Nothing to upload — every listing is already posted." : "No listings yet — add some in the grid below first.");
+    return;
+  }
+  const confirmed = confirm(
+    `This publishes ${candidates.length} REAL, public eBay listing${candidates.length === 1 ? "" : "s"}. This can't be undone from here. Continue?`
+  );
+  if (!confirmed) return;
+  hideEbayBanner();
+  const failures = [];
+  let posted = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    const listing = candidates[i];
+    showEbayInfo(`Posting ${i + 1}/${candidates.length} to eBay: ${listing.name || "unnamed"}…`);
+    try {
+      const result = await postSingleListing(listing, true, settings);
+      if (result.success) {
+        posted++;
+      } else {
+        failures.push(`${listing.name || "unnamed"}: ${result.message}`);
+      }
+    } catch (err) {
+      failures.push(`${listing.name || "unnamed"}: ${err.message}`);
+    }
+    saveListings();
+    renderEbayRows();
+  }
+  renderCard();
+  if (!failures.length) {
+    showEbayInfo(`Posted all ${posted} listing${posted === 1 ? "" : "s"} to eBay.`);
+  } else if (posted) {
+    showEbayError(`Posted ${posted}/${candidates.length}. Failed: ${failures.join(" | ")}`);
+  } else {
+    showEbayError(`All ${candidates.length} failed: ${failures.join(" | ")}`);
   }
 }
 
@@ -1066,6 +1160,8 @@ function bindEbaySettings() {
 }
 
 function bindEbayToolbar() {
+  document.getElementById("ebay-generate-all-btn").addEventListener("click", handleGenerateAllListings);
+  document.getElementById("ebay-upload-all-btn").addEventListener("click", handleUploadAllListings);
   document.getElementById("ebay-clear-posted-btn").addEventListener("click", () => {
     const postedCount = listings.filter((l) => l.status === "Listed").length;
     if (!postedCount) {

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CTT Lite</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- Password gate -->
+<div id="auth-gate" class="auth-gate">
+  <form id="auth-form" class="auth-box">
+    <h1>🏴‍☠️ CTT Lite</h1>
+    <p>This is a private tool — enter the password to continue.</p>
+    <input type="password" id="auth-password" placeholder="Password" autofocus />
+    <p id="auth-error" class="auth-error" hidden>Wrong password.</p>
+    <button type="submit">Enter</button>
+  </form>
+</div>
+
+<!-- Main app -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand">🏴‍☠️ CTT Lite</div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="inventory">Inventory</button>
+      <button class="tab-btn" data-tab="consignment">Consignment</button>
+      <button class="tab-btn" data-tab="ebay">eBay</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Inventory tab -->
+    <section id="tab-inventory" class="tab-panel active">
+      <div id="inv-banner" class="banner" hidden></div>
+
+      <div class="inv-toolbar">
+        <input type="text" id="inv-search" placeholder="Search name / # / line / license…" class="toolbar-input" />
+        <select id="inv-filter-owner" class="toolbar-input"></select>
+        <select id="inv-filter-line" class="toolbar-input"></select>
+        <label class="toolbar-check"><input type="checkbox" id="inv-filter-zero-qty" /> Zero qty</label>
+        <label class="toolbar-check"><input type="checkbox" id="inv-filter-not-listed" /> Not listed</label>
+        <span id="inv-count" class="inv-count"></span>
+        <button id="inv-refresh" class="secondary-btn">↻ Refresh</button>
+      </div>
+
+      <datalist id="line-datalist"></datalist>
+      <datalist id="license-datalist"></datalist>
+
+      <div class="inv-grid">
+        <div id="inv-header" class="inv-header"></div>
+        <div id="inv-add-row" class="inv-add-row"></div>
+        <div id="inv-scroll" class="inv-scroll">
+          <div id="inv-spacer-top"></div>
+          <div id="inv-rows"></div>
+          <div id="inv-spacer-bottom"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Consignment tab (coming soon) -->
+    <section id="tab-consignment" class="tab-panel">
+      <div class="coming-soon">
+        <h2>Consignment</h2>
+        <p>Coming next — summary view, per-convention detail, and the Shipped toggle.</p>
+      </div>
+    </section>
+
+    <!-- eBay tab (coming soon) -->
+    <section id="tab-ebay" class="tab-panel">
+      <div class="coming-soon">
+        <h2>eBay Listings</h2>
+        <p>Coming last — listing generation, photos, and live posting.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/shared.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

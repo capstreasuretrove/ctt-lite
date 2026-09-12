@@ -2,14 +2,15 @@
 
 A lean, browser-based companion to the CTT desktop app — Inventory (Pops), Consignment, and eBay listing creation, for use on the road. No install, no native toolchain.
 
-**Status:** Inventory module built and smoke-tested (against a mocked backend — see caveat below). Consignment and eBay are stubbed as "coming soon."
+**Status:** Inventory module built and smoke-tested (against a mocked backend — see caveat below). `js/config.js` is already filled in with your Inventory Apps Script URL and password `4141`. Consignment and eBay are stubbed as "coming soon."
+
+Live at: https://ctt-lite.netlify.app/
 
 ## Setup
 
-1. Open `js/config.js` and fill in:
-   - `INVENTORY_SCRIPT_URL` — the deployed Google Apps Script Web App URL that already serves `getInventory` / `addInventoryItems` / `updateInventoryItems` / `deleteInventoryItems` (the same one the desktop app and original site use). Looks like `https://script.google.com/macros/s/AKfycb.../exec`.
-   - `AUTH_PASSWORD` — whatever you want this gated behind. It's a simple client-side check (like the existing `?admin=1` pattern on the main site), not real security — the actual protection is that nobody else has your Apps Script URLs.
-2. Deploy: this is plain static files (no build step) — push to a new GitHub repo and connect a **new, separate** Netlify site to it (per your call to keep this disconnected from the public site's repo/deploys), or just drag-and-drop the folder into Netlify.
+Already done for this build — `js/config.js` has your real `INVENTORY_SCRIPT_URL` and `AUTH_PASSWORD` baked in. Just redeploy: drag this folder onto Netlify again (or push to your GitHub repo if you connected one) to update the live site.
+
+If you ever need to change either value later: `js/config.js` is a plain text file — on a Mac, right-click it → Open With → TextEdit (avoid double-clicking, which can try to run it instead of opening it as text).
 
 ## Important caveat
 

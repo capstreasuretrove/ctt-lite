@@ -52,8 +52,18 @@ let rowHeightMeasured = false;
 let addRowDraft = blankDraft();
 let addRowSaving = false;
 
+/** Today's date as YYYY-MM-DD in the browser's local time (matches the
+ * Sheet's plain-text dateAdded format, e.g. "2026-08-05"). */
+function todayIso() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function blankDraft() {
-  const d = { owner: "BL" };
+  const d = { owner: "BL", qty: "1", dateAdded: todayIso() };
   for (const col of COLUMNS) if (!(col.key in d)) d[col.key] = col.type === "checkbox" ? false : "";
   return d;
 }

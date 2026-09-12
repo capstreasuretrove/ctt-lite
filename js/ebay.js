@@ -519,7 +519,6 @@ function renderEbayRows() {
   for (const listing of listings) frag.appendChild(buildEbayRowEl(listing));
   rowsEl.appendChild(frag);
   updateEbayCount();
-  populateEbayNameDatalist();
 }
 
 function buildEbayAddRowEl() {
@@ -576,23 +575,12 @@ function commitAddRow(draft) {
   hideEbayBanner();
 }
 
-function populateEbayNameDatalist() {
-  // Reuses Inventory's already-loaded `items` global (see inventory.js) —
-  // both modules share the page's plain-script global scope. Falls back
-  // to nothing if Inventory hasn't loaded yet.
-  const list = document.getElementById("ebay-name-datalist");
-  if (typeof items === "undefined" || !Array.isArray(items)) {
-    list.innerHTML = "";
-    return;
-  }
-  list.innerHTML = distinctValues(items, "name")
-    .map((n) => `<option value="${escapeHtml(n)}">`)
-    .join("");
-}
-
-/** On the card, picking a Name that matches an Inventory item autofills
- * #/line/license — but only into fields that are still blank, so it never
- * clobbers something already typed. */
+/** On the card, picking a Name that exactly matches an Inventory item
+ * autofills #/line/license — but only into fields that are still blank, so
+ * it never clobbers something already typed. This is the passive safety
+ * net that runs on every Generate; the explicit "🔍 Look up from
+ * Inventory" boxes below are the deliberate, overwrite-everything version
+ * of the same idea. */
 function autofillFromInventory(listing) {
   if (typeof items === "undefined" || !Array.isArray(items)) return;
   const match = items.find((it) => it.name && it.name.toLowerCase() === (listing.name || "").toLowerCase());
@@ -600,6 +588,85 @@ function autofillFromInventory(listing) {
   if (isEmptyEbay(listing.number)) listing.number = match.number || "";
   if (isEmptyEbay(listing.line)) listing.line = match.line || "";
   if (isEmptyEbay(listing.license)) listing.license = match.license || "";
+}
+
+// ---------- Inventory lookup (explicit "grab the full record" search) ----------
+//
+// Brody asked for a way to type a partial name (e.g. "Venompool") and have
+// it pull the full Name/#/Line/License from Inventory rather than typing
+// each field by hand. Substring match against Inventory's already-loaded
+// `items` global (see inventory.js — both modules share the page's plain-
+// script global scope), showing enough of each match (line/license/#) to
+// tell same-named variants apart before picking one.
+
+function findInventoryMatches(query) {
+  if (typeof items === "undefined" || !Array.isArray(items)) return [];
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return items.filter((it) => it.name && it.name.toLowerCase().includes(q)).slice(0, 8);
+}
+
+/** Unlike autofillFromInventory(), this OVERWRITES Name/#/Line/License
+ * unconditionally — picking a lookup result is a deliberate "grab this
+ * record" action, not a passive fill-the-blanks safety net. */
+function applyInventoryMatchToListing(listing, match) {
+  listing.name = match.name || listing.name;
+  listing.number = match.number || listing.number;
+  listing.line = match.line || listing.line;
+  listing.license = match.license || listing.license;
+}
+
+/** Wires a text input + results container into a live-filtered Inventory
+ * lookup. Calls onPick(item) when a result is clicked. */
+function attachInventoryLookup(inputEl, resultsEl, onPick) {
+  inputEl.addEventListener("input", () => {
+    const matches = findInventoryMatches(inputEl.value);
+    resultsEl.innerHTML = "";
+    if (!matches.length) {
+      resultsEl.hidden = true;
+      return;
+    }
+    for (const item of matches) {
+      const row = document.createElement("div");
+      row.className = "ebay-lookup-row";
+      const detail = [item.line, item.license].filter(Boolean).join(" · ");
+      row.textContent = `${item.name}${detail ? " — " + detail : ""}${item.number ? " #" + item.number : ""}`;
+      // mousedown (not click) fires before the input's blur hides the
+      // results, so the pick registers before it disappears.
+      row.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        onPick(item);
+        resultsEl.hidden = true;
+        resultsEl.innerHTML = "";
+        inputEl.value = "";
+      });
+      resultsEl.appendChild(row);
+    }
+    resultsEl.hidden = false;
+  });
+  inputEl.addEventListener("blur", () => {
+    setTimeout(() => {
+      resultsEl.hidden = true;
+    }, 150);
+  });
+}
+
+/** The toolbar-level lookup: picking a match starts a brand-new listing
+ * draft pre-filled from Inventory, and jumps straight into its card. */
+function bindInventoryLookupBar() {
+  const input = document.getElementById("ebay-lookup-input");
+  const results = document.getElementById("ebay-lookup-results");
+  if (!input) return;
+  attachInventoryLookup(input, results, (item) => {
+    const draft = blankListingDraft();
+    applyInventoryMatchToListing(draft, item);
+    draft.id = `ebay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    listings.push(draft);
+    saveListings();
+    renderEbayRows();
+    hideEbayBanner();
+    openListingCard(draft.id);
+  });
 }
 
 // ---------- Card (Stage 2) ----------
@@ -662,6 +729,25 @@ function renderCard() {
   const detailsHeading = document.createElement("h3");
   detailsHeading.textContent = "Details";
   detailsSection.appendChild(detailsHeading);
+  const cardLookupWrap = document.createElement("div");
+  cardLookupWrap.className = "ebay-lookup";
+  const cardLookupInput = document.createElement("input");
+  cardLookupInput.className = "toolbar-input";
+  cardLookupInput.placeholder = "🔍 Re-look up in Inventory (fixes Name/#/Line/License)";
+  cardLookupInput.autocomplete = "off";
+  const cardLookupResults = document.createElement("div");
+  cardLookupResults.className = "ebay-lookup-results";
+  cardLookupResults.hidden = true;
+  cardLookupWrap.appendChild(cardLookupInput);
+  cardLookupWrap.appendChild(cardLookupResults);
+  detailsSection.appendChild(cardLookupWrap);
+  attachInventoryLookup(cardLookupInput, cardLookupResults, (item) => {
+    applyInventoryMatchToListing(listing, item);
+    saveListings();
+    renderEbayRows();
+    renderCard();
+  });
+
   const fieldsEl = document.createElement("div");
   fieldsEl.className = "ebay-card-fields";
 
@@ -1003,5 +1089,6 @@ function initEbay() {
   buildEbayAddRowEl();
   bindEbaySettings();
   bindEbayToolbar();
+  bindInventoryLookupBar();
   renderEbayRows();
 }

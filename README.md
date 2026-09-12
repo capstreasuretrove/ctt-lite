@@ -36,6 +36,8 @@ Every other module in this app was confirmed against your live data before being
 
 **eBay**: grid of listing drafts → open a card per listing for template-specific fields, photos (drag-and-drop, up to 11 + your CTT store photo auto-appended), title/description generation (Common/Exclusive/Limited Edition/Signed templates, matching your current title-suffix/protector/multi-quantity preferences), Verify/Post via your real proxy. Listings live in this browser's storage only (no Sheet involved, per the original design). Not included: Mercari/Facebook Marketplace exports (scoped out — just eBay for now).
 
+**New**: a "🔍 Look up from Inventory" search bar above the eBay grid — type a partial name (e.g. "Venompool"), pick the match, and it creates a new listing pre-filled with Name/#/Line/License and opens its card right away. The same search box also appears inside each listing's card, so you can re-search and overwrite those fields on a listing you already started (handy if you picked the wrong item or need to fix a typo). This is separate from the quieter autofill that already ran in the background during Generate — that one only fills in blank fields; this one is the deliberate "grab the whole record" version.
+
 Deliberately dropped throughout: restock alerts (and Peak Qty tracking), Autographs tab, Calendar, Dashboard, Show Sales Viewer, Settings page, barcode scanning — none of these are part of the lite scope.
 
 ## Housekeeping owed

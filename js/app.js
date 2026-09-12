@@ -19,6 +19,7 @@ function onAuthed() {
   initTabs();
   initInventory();
   initConsignment();
+  initEbay();
 }
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -17,4 +17,9 @@ const CONFIG = {
   CONSIGNMENT_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzAi6H8glGOGq0-y9DJS8tMj6umtp1hJLDxqZ3TRUeRHJaBBxttijcYJ6B_upywHqsi/exec",
   CONSIGNMENT_SUMMARY_SHEET_ID: "1gMnjS1cCvc_Rv_mZrK3JdMxLHnc5byV4EJ1zqgIZGf8",
   AUTH_PASSWORD: "4141",
+  // eBay's Trading API needs an auth token and imgBB needs an API key —
+  // both entered via the eBay tab's Settings panel and kept only in this
+  // browser's localStorage (see js/ebay.js). Nothing to fill in here.
+  EBAY_PROXY_URL: "/.netlify/functions/ebay-proxy",
+  CTT_STORE_PHOTO_DRIVE_ID: "1RxxPvmVJ4bQlGtG3TWkaqx22VFAYOOwZ",
 };

@@ -92,14 +92,45 @@
       </div>
     </section>
 
-    <!-- eBay tab (coming soon) -->
+    <!-- eBay tab -->
     <section id="tab-ebay" class="tab-panel">
-      <div class="coming-soon">
-        <h2>eBay Listings</h2>
-        <p>Coming last — listing generation, photos, and live posting.</p>
+      <div id="ebay-banner" class="banner" hidden></div>
+
+      <div class="inv-toolbar">
+        <button id="ebay-settings-btn" class="secondary-btn">⚙ Settings</button>
+        <span id="ebay-count" class="inv-count"></span>
+        <button id="ebay-clear-posted-btn" class="secondary-btn">Clear posted</button>
+      </div>
+
+      <div id="ebay-settings-form" class="con-new-form" hidden>
+        <div class="con-new-fields">
+          <label>eBay Auth Token<input type="password" id="ebay-auth-token" class="toolbar-input" autocomplete="off" /></label>
+          <label>imgBB API Key<input type="password" id="ebay-imgbb-key" class="toolbar-input" autocomplete="off" /></label>
+        </div>
+        <div class="con-new-actions">
+          <button id="ebay-settings-save" class="secondary-btn con-new-save-btn">Save</button>
+          <button id="ebay-settings-cancel" class="secondary-btn">Cancel</button>
+        </div>
+        <p class="ebay-settings-note">Saved only in this browser's storage — sent only to eBay/imgBB when you post, never anywhere else.</p>
+      </div>
+
+      <datalist id="ebay-name-datalist"></datalist>
+
+      <div class="inv-grid">
+        <div id="ebay-header" class="inv-header"></div>
+        <div id="ebay-add-row" class="inv-add-row"></div>
+        <div id="ebay-rows"></div>
       </div>
     </section>
   </main>
+</div>
+
+<!-- eBay listing card (Stage 2: photos, generate, verify, post) -->
+<div id="ebay-card-overlay" class="ebay-card-overlay" hidden>
+  <div class="ebay-card">
+    <button id="ebay-card-close" class="icon-btn ebay-card-close" title="Close">✕</button>
+    <div id="ebay-card-body"></div>
+  </div>
 </div>
 
 <script src="js/config.js"></script>
@@ -107,6 +138,7 @@
 <script src="js/auth.js"></script>
 <script src="js/inventory.js"></script>
 <script src="js/consignment.js"></script>
+<script src="js/ebay.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

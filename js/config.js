@@ -28,4 +28,7 @@ const CONFIG = {
   // tabs (gid is stable even if the tab is renamed; a sheet name isn't).
   CALENDAR_SHEET_ID: "1mb8i23IzL-6dYh3Qz3roJaz5_0pLtiw7cFGCVLzqyPU",
   CALENDAR_TAB_GID: "1533121598",
+  // Booth Layouts — its own Apps Script Web App over the "CTT - Booth Layouts" sheet.
+  LAYOUTS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzh8HIVjbnqnPD87WYmSSUwXEn6bfF21PzNB4GMe_YLLbmM3ALsGMh28VsMAsmUdHPY/exec",
+  LAYOUTS_SHEET_ID: "1a61_luAQjK9Wsy-NbJisdFA-P_5YLYaIxL_r4paFm6o",
 };

@@ -21,6 +21,7 @@ function onAuthed() {
   initConsignment();
   initEbay();
   initCalendar();
+  initBoothLayouts();
 }
 
 document.addEventListener("DOMContentLoaded", () => {

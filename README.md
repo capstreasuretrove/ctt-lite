@@ -1,8 +1,8 @@
 # CTT Lite
 
-A lean, browser-based companion to the CTT desktop app — Inventory (Pops), Consignment, and eBay listing creation, for use on the road. No install, no native toolchain.
+A lean, browser-based companion to the CTT desktop app — Inventory (Pops), Consignment, eBay listing creation, Calendar, and Booth Layouts, for use on the road. No install, no native toolchain.
 
-**Status:** Four modules built. Inventory, Consignment, and Calendar are confirmed working against your real live sheets. eBay Listings is built against your real, already-working `ebay-proxy.js` but has **not** been live-tested (no eBay token available while building it) — verify it yourself before trusting it with a real listing (see below).
+**Status:** Five modules built. Inventory, Consignment, and Calendar are confirmed working against your real live sheets. Booth Layouts was built in a separate chat and confirmed working by you already (it also has a Tauri desktop port — see `ctt-booth-layout-manager-plan.md`). eBay Listings is built against your real, already-working `ebay-proxy.js` but has **not** been live-tested (no eBay token available while building it) — verify it yourself before trusting it with a real listing (see below).
 
 Live at: https://ctt-lite.netlify.app/
 
@@ -35,7 +35,20 @@ Every other module in this app was confirmed against your live data before being
 2. Click **Verify with eBay** first (calls eBay's `VerifyAddItem` — validates without publishing anything). If it comes back with an error, that's expected on a first try — eBay's XML schema is strict, and the XML builder here was reconstructed from documented field names/constants, not your literal source code. Paste me the error and I'll fix it.
 3. Only use **Post Live** (or **Upload All Listings** once you trust it) after Verify succeeds on at least one listing. Posting always asks for confirmation first since it's real and public.
 
-**Calendar**: a simple month-grid viewer over your Calendar Google Sheet's Schedule tab — read-only, no login or Apps Script needed (same public-link technique as the Consignment summary tab). Shows **every** row regardless of the Public? checkbox or Type (unlike the public website, which hides unchecked/Personal rows) — this is your own private tool, so nothing's filtered out. Each row can put up to two things on the calendar: the show/attending dates themselves, and — for Send-In rows with a deadline — a separate 📬 marker on the mail-in deadline date, since that's the date you'd actually need to act on. Click any event to see its full details (location, notes, website) below the grid. Prev/Today/Next to move between months, Refresh to re-pull the sheet.
+**Calendar**: a simple month-grid viewer over your Calendar Google Sheet's Schedule tab — read-only, no login or Apps Script needed (same public-link technique as the Consignment summary tab). Shows **every** row regardless of the Public? checkbox or Type (unlike the public website, which hides unchecked/Personal rows) — this is your own private tool, so nothing's filtered out. Each row can put up to two things on the calendar: the show/attending dates themselves, and — for Send-In rows with a deadline — a separate 📬 marker on the mail-in deadline date, since that's the date you'd actually need to act on. Click any event to see its full details (location, notes, website) below the grid. Prev/Today/Next to move between months, Refresh to re-pull the sheet. Event colors: Vending `#e6000b`, Send-In (both the show date and its mail-in deadline) `#0032e5`, Personal `#f4c509`.
+
+## Booth Layouts
+
+A fifth tab, **Booth Layouts**, for planning how the booth is set up per show. This module was built in a separate chat session and merged in here — data lives in its own Google Sheet ("CTT - Booth Layouts") behind its own Apps Script Web App, nothing to do with the Inventory/Consignment/Calendar scripts/sheets. `js/config.js` already has the URL.
+
+- **+ New Layout** — give it a show name/date, pick a booth template (Woodbridge Toy Show for now), and optionally **Start from** a past layout to reuse it.
+- **Painting** — in Edit mode, drag across cells to select them, type a label (free text; suggestions come from your Inventory lines/licenses and labels you've used), press Enter. Same label = same color. Click a labeled block to relabel/recolor it, or pick "This cell only". Painting over part of a block splits it. Blocks always stop at shelf edges (a drag across several shelves just paints each shelf). The dashed outline is the open top shelf.
+- **Save** is explicit (button) — nothing saves as you paint. **Undo** steps back through recent edits.
+- **Lock (view)** — existing layouts open locked so you can't nudge them by accident while setting up the booth; hit **Edit layout** to change them.
+- **★ Favorites** and the **Start new from this** button on each row are for finding and reusing layouts you liked.
+- On a phone the diagram scrolls sideways.
+
+Not built yet (see the project's `ctt-booth-layout-manager-plan.md`): creating new booth templates in-app, and the overview map.
 
 ## What's here vs. not
 
@@ -47,7 +60,7 @@ Every other module in this app was confirmed against your live data before being
 
 **New**: a "🔍 Look up from Inventory" search bar above the eBay grid — type a partial name (e.g. "Venompool"), pick the match, and it creates a new listing pre-filled with Name/#/Line/License and opens its card right away. The same search box also appears inside each listing's card, so you can re-search and overwrite those fields on a listing you already started (handy if you picked the wrong item or need to fix a typo). This is separate from the quieter autofill that already ran in the background during Generate — that one only fills in blank fields; this one is the deliberate "grab the whole record" version.
 
-Deliberately dropped throughout: restock alerts (and Peak Qty tracking), Autographs tab, Calendar, Dashboard, Show Sales Viewer, Settings page, barcode scanning — none of these are part of the lite scope.
+Deliberately dropped throughout: restock alerts (and Peak Qty tracking), Autographs tab, Dashboard, Show Sales Viewer, Settings page, barcode scanning — none of these are part of the lite scope.
 
 ## Housekeeping owed
 

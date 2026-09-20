@@ -30,6 +30,7 @@
       <button class="tab-btn active" data-tab="inventory">Inventory</button>
       <button class="tab-btn" data-tab="consignment">Consignment</button>
       <button class="tab-btn" data-tab="ebay">eBay</button>
+      <button class="tab-btn" data-tab="layouts">Booth Layouts</button>
     </nav>
   </header>
 
@@ -132,6 +133,39 @@
         <div id="ebay-rows"></div>
       </div>
     </section>
+
+    <!-- Booth Layouts tab -->
+    <section id="tab-layouts" class="tab-panel">
+      <div id="bl-banner" class="banner" hidden></div>
+
+      <div id="bl-list-view">
+        <div class="inv-toolbar">
+          <input type="text" id="bl-search" placeholder="Search shows…" class="toolbar-input" style="flex:1; min-width:200px;" />
+          <label class="toolbar-check"><input type="checkbox" id="bl-starred-only" /> ★ Favorites only</label>
+          <span id="bl-count" class="inv-count"></span>
+          <button id="bl-new-btn" class="primary-btn">+ New Layout</button>
+          <button id="bl-refresh" class="secondary-btn">↻ Refresh</button>
+        </div>
+
+        <div id="bl-new-form" class="con-new-form" hidden>
+          <div class="con-new-fields">
+            <label>Show name<input type="text" id="bl-new-name" class="toolbar-input" placeholder="e.g. Woodbridge Toy Show — Oct 2026" /></label>
+            <label>Show date<input type="date" id="bl-new-date" class="toolbar-input" /></label>
+            <label>Booth template<select id="bl-new-template" class="toolbar-input"></select></label>
+            <label>Start from<select id="bl-new-from" class="toolbar-input"></select></label>
+          </div>
+          <div class="con-new-actions">
+            <button id="bl-new-create" class="secondary-btn con-new-save-btn">Create</button>
+            <button id="bl-new-cancel" class="secondary-btn">Cancel</button>
+          </div>
+        </div>
+
+        <div id="bl-list" class="bl-list"></div>
+      </div>
+
+      <div id="bl-editor" hidden></div>
+      <datalist id="bl-suggest"></datalist>
+    </section>
   </main>
 </div>
 
@@ -149,6 +183,7 @@
 <script src="js/inventory.js"></script>
 <script src="js/consignment.js"></script>
 <script src="js/ebay.js"></script>
+<script src="js/layouts.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

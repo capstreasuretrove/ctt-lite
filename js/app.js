@@ -20,6 +20,7 @@ function onAuthed() {
   initInventory();
   initConsignment();
   initEbay();
+  initBoothLayouts();
 }
 
 document.addEventListener("DOMContentLoaded", () => {

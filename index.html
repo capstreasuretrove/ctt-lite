@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CTT Lite</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="256x256" href="assets/favicon-256.png" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- Password gate -->
+<div id="auth-gate" class="auth-gate">
+  <form id="auth-form" class="auth-box">
+    <img src="assets/logo.png" alt="Captain's Treasure Trove" class="auth-logo" />
+    <p>This is a private tool — enter the password to continue.</p>
+    <input type="password" id="auth-password" placeholder="Password" autofocus />
+    <p id="auth-error" class="auth-error" hidden>Wrong password.</p>
+    <button type="submit">Enter</button>
+  </form>
+</div>
+
+<!-- Main app -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand"><img src="assets/logo.png" alt="Captain's Treasure Trove" class="brand-logo" /></div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="inventory">Inventory</button>
+      <button class="tab-btn" data-tab="consignment">Consignment</button>
+      <button class="tab-btn" data-tab="ebay">eBay</button>
+      <button class="tab-btn" data-tab="layouts">Booth Layouts</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Inventory tab -->
+    <section id="tab-inventory" class="tab-panel active">
+      <div id="inv-banner" class="banner" hidden></div>
+
+      <div class="inv-toolbar">
+        <input type="text" id="inv-search" placeholder="Search name / # / line / license…" class="toolbar-input" />
+        <select id="inv-filter-owner" class="toolbar-input"></select>
+        <select id="inv-filter-line" class="toolbar-input"></select>
+        <label class="toolbar-check"><input type="checkbox" id="inv-filter-zero-qty" /> Zero qty</label>
+        <label class="toolbar-check"><input type="checkbox" id="inv-filter-not-listed" /> Not listed</label>
+        <span id="inv-count" class="inv-count"></span>
+        <button id="inv-refresh" class="secondary-btn">↻ Refresh</button>
+      </div>
+
+      <datalist id="line-datalist"></datalist>
+      <datalist id="license-datalist"></datalist>
+
+      <div class="inv-grid">
+        <div id="inv-header" class="inv-header"></div>
+        <div id="inv-add-row" class="inv-add-row"></div>
+        <div id="inv-scroll" class="inv-scroll">
+          <div id="inv-spacer-top"></div>
+          <div id="inv-rows"></div>
+          <div id="inv-spacer-bottom"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Consignment tab -->
+    <section id="tab-consignment" class="tab-panel">
+      <div id="con-banner" class="banner" hidden></div>
+
+      <div class="inv-toolbar">
+        <select id="con-picker" class="toolbar-input" style="flex:1; min-width:220px;"></select>
+        <span id="con-count" class="inv-count"></span>
+        <button id="con-new-btn" class="secondary-btn">+ New Convention</button>
+        <button id="con-refresh" class="secondary-btn">↻ Refresh</button>
+      </div>
+
+      <div id="con-new-form" class="con-new-form" hidden>
+        <div class="con-new-fields">
+          <label>Convention name<input type="text" id="con-new-name" class="toolbar-input" placeholder="e.g. Monster Mania 67" /></label>
+          <label>Date attending<input type="date" id="con-new-date-attending" class="toolbar-input" /></label>
+          <label>Due date<input type="date" id="con-new-due-date" class="toolbar-input" /></label>
+          <label>Tab name<input type="text" id="con-new-tabname" class="toolbar-input" placeholder="auto-suggested" /></label>
+        </div>
+        <div class="con-new-actions">
+          <button id="con-new-save" class="secondary-btn con-new-save-btn">Create</button>
+          <button id="con-new-cancel" class="secondary-btn">Cancel</button>
+        </div>
+      </div>
+
+      <div id="con-summary" class="con-summary" hidden></div>
+
+      <div id="con-grid" class="inv-grid" hidden>
+        <div id="con-header" class="inv-header"></div>
+        <div id="con-add-row" class="inv-add-row"></div>
+        <div id="con-rows"></div>
+      </div>
+    </section>
+
+    <!-- eBay tab -->
+    <section id="tab-ebay" class="tab-panel">
+      <div id="ebay-banner" class="banner" hidden></div>
+
+      <div class="inv-toolbar">
+        <button id="ebay-settings-btn" class="secondary-btn">⚙ Settings</button>
+        <button id="ebay-generate-all-btn" class="secondary-btn">⚡ Generate Listings</button>
+        <button id="ebay-upload-all-btn" class="primary-btn">📤 Upload All Listings</button>
+        <span id="ebay-count" class="inv-count"></span>
+        <button id="ebay-clear-posted-btn" class="secondary-btn">Clear posted</button>
+      </div>
+
+      <div id="ebay-settings-form" class="con-new-form" hidden>
+        <div class="con-new-fields">
+          <label>eBay Auth Token<input type="password" id="ebay-auth-token" class="toolbar-input" autocomplete="off" /></label>
+          <label>imgBB API Key<input type="password" id="ebay-imgbb-key" class="toolbar-input" autocomplete="off" /></label>
+        </div>
+        <div class="con-new-actions">
+          <button id="ebay-settings-save" class="secondary-btn con-new-save-btn">Save</button>
+          <button id="ebay-settings-cancel" class="secondary-btn">Cancel</button>
+        </div>
+        <p class="ebay-settings-note">Saved only in this browser's storage — sent only to eBay/imgBB when you post, never anywhere else.</p>
+      </div>
+
+      <div class="ebay-lookup-bar">
+        <div class="ebay-lookup">
+          <input id="ebay-lookup-input" class="toolbar-input" placeholder="🔍 Look up from Inventory (e.g. Venompool) to start a new listing" autocomplete="off" />
+          <div id="ebay-lookup-results" class="ebay-lookup-results" hidden></div>
+        </div>
+      </div>
+
+      <div class="inv-grid">
+        <div id="ebay-header" class="inv-header"></div>
+        <div id="ebay-add-row" class="inv-add-row"></div>
+        <div id="ebay-rows"></div>
+      </div>
+    </section>
+
+    <!-- Booth Layouts tab -->
+    <section id="tab-layouts" class="tab-panel">
+      <div id="bl-banner" class="banner" hidden></div>
+
+      <div id="bl-list-view">
+        <div class="inv-toolbar">
+          <input type="text" id="bl-search" placeholder="Search shows…" class="toolbar-input" style="flex:1; min-width:200px;" />
+          <label class="toolbar-check"><input type="checkbox" id="bl-starred-only" /> ★ Favorites only</label>
+          <span id="bl-count" class="inv-count"></span>
+          <button id="bl-new-btn" class="primary-btn">+ New Layout</button>
+          <button id="bl-refresh" class="secondary-btn">↻ Refresh</button>
+        </div>
+
+        <div id="bl-new-form" class="con-new-form" hidden>
+          <div class="con-new-fields">
+            <label>Show name<input type="text" id="bl-new-name" class="toolbar-input" placeholder="e.g. Woodbridge Toy Show — Oct 2026" /></label>
+            <label>Show date<input type="date" id="bl-new-date" class="toolbar-input" /></label>
+            <label>Booth template<select id="bl-new-template" class="toolbar-input"></select></label>
+            <label>Start from<select id="bl-new-from" class="toolbar-input"></select></label>
+          </div>
+          <div class="con-new-actions">
+            <button id="bl-new-create" class="secondary-btn con-new-save-btn">Create</button>
+            <button id="bl-new-cancel" class="secondary-btn">Cancel</button>
+          </div>
+        </div>
+
+        <div id="bl-list" class="bl-list"></div>
+      </div>
+
+      <div id="bl-editor" hidden></div>
+      <datalist id="bl-suggest"></datalist>
+    </section>
+  </main>
+</div>
+
+<!-- eBay listing card (Stage 2: photos, generate, verify, post) -->
+<div id="ebay-card-overlay" class="ebay-card-overlay" hidden>
+  <div class="ebay-card">
+    <button id="ebay-card-close" class="icon-btn ebay-card-close" title="Close">✕</button>
+    <div id="ebay-card-body"></div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/shared.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/consignment.js"></script>
+<script src="js/ebay.js"></script>
+<script src="js/layouts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

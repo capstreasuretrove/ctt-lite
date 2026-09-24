@@ -43,6 +43,7 @@ A fourth tab, **Booth Layouts**, for planning how the booth is set up per show. 
 - **Painting** — in Edit mode, drag across cells to select them, type a label (free text; suggestions come from your Inventory lines/licenses and labels you've used), press Enter. Same label = same color. Click a labeled block to relabel/recolor it, or pick "This cell only". Painting over part of a block splits it. Blocks always stop at shelf edges (a drag across several shelves just paints each shelf). The dashed outline is the open top shelf.
 - **Save** is explicit (button) — nothing saves as you paint. **Undo** steps back through recent edits.
 - **Lock (view)** — existing layouts open locked so you can't nudge them by accident while setting up the booth; hit **Edit layout** to change them.
+- **⊞ Grid** toggles thin cell-boundary lines inside the shelf/tabletop boxes on and off, so you can see exactly where each cell is when placing labels. It only affects the cells themselves — never the shelf/shelf-divider borders or the page around the diagram. Your choice is remembered in the browser for next time.
 - **★ Favorites** and the **Start new from this** button on each row are for finding and reusing layouts you liked.
 - On a phone the diagram scrolls sideways.
 

@@ -37,6 +37,13 @@
   let drag = null; // in-progress drag selection
   let selUI = { color: null, colorTouched: false };
   const knownLabels = new Set(); // suggestion pool: labels seen in opened layouts
+  const GRID_PREF_KEY = "ctt_bl_show_grid";
+  let showGrid = (() => {
+    try {
+      const v = localStorage.getItem(GRID_PREF_KEY);
+      return v === null ? true : v === "1";
+    } catch (e) { return true; }
+  })();
 
   const $ = (id) => document.getElementById(id);
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -442,6 +449,7 @@
         <span class="bl-template-name">${escapeHtml(tplName)}</span>
         <span class="bl-status" id="bl-status"></span>
         <button class="secondary-btn" id="bl-undo">↶ Undo</button>
+        <button class="secondary-btn" id="bl-grid-toggle" title="Show cell grid lines on the shelves">⊞ Grid</button>
         <button class="secondary-btn" id="bl-mode"></button>
         <button class="primary-btn" id="bl-save">Save</button>
       </div>
@@ -458,6 +466,12 @@
     $("bl-notes").addEventListener("input", (e) => { ed.notes = e.target.value; markDirty(); });
     $("bl-star").addEventListener("click", () => { ed.starred = !ed.starred; markDirty(); });
     $("bl-undo").addEventListener("click", undo);
+    $("bl-grid-toggle").addEventListener("click", () => {
+      showGrid = !showGrid;
+      try { localStorage.setItem(GRID_PREF_KEY, showGrid ? "1" : "0"); } catch (e) { /* ignore */ }
+      updateHeaderState();
+      $("bl-diagram").classList.toggle("show-grid", showGrid);
+    });
     $("bl-mode").addEventListener("click", () => {
       ed.mode = ed.mode === "edit" ? "view" : "edit";
       ed.sel = null;
@@ -473,6 +487,7 @@
     $("bl-star").classList.toggle("on", ed.starred);
     $("bl-undo").disabled = !ed.history.length || ed.mode !== "edit";
     $("bl-undo").hidden = ed.mode !== "edit";
+    $("bl-grid-toggle").classList.toggle("on", showGrid);
     $("bl-mode").textContent = ed.mode === "edit" ? "🔒 Lock (view)" : "✏ Edit layout";
     const st = $("bl-status");
     if (ed.saving) st.textContent = "Saving…";
@@ -528,7 +543,7 @@
   function renderDiagram() {
     const host = $("bl-diagram");
     host.innerHTML = "";
-    host.className = "bl-diagram " + (ed.mode === "edit" ? "editing" : "viewing");
+    host.className = "bl-diagram " + (ed.mode === "edit" ? "editing" : "viewing") + (showGrid ? " show-grid" : "");
     const groups = computeCellSize();
     ed.els = {};
     Object.keys(groups).sort((a, b) => a - b).forEach((gk) => {

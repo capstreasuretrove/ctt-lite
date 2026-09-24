@@ -584,6 +584,19 @@
     blocksEl.className = "bl-layer";
     grid.appendChild(blocksEl);
 
+    // grid-line overlay: same cell positions, drawn ON TOP of the blocks so the
+    // lines stay visible over painted colors too (toggled by the ⊞ Grid button).
+    const gridOverlayEl = document.createElement("div");
+    gridOverlayEl.className = "bl-layer bl-grid-overlay";
+    let gridCellHtml = "";
+    for (let r = 1; r <= sec.rows; r++) {
+      for (let c = 1; c <= secWidth(sec, r); c++) {
+        gridCellHtml += `<div class="bl-cell-grid" style="left:${(c - 1) * cw}px;top:${(r - 1) * ch}px;width:${cw}px;height:${ch}px"></div>`;
+      }
+    }
+    gridOverlayEl.innerHTML = gridCellHtml;
+    grid.appendChild(gridOverlayEl);
+
     // frames: solid for framed shelves, dashed for the open top shelf,
     // an outline polygon for shapes without shelves (tabletop w/ notch).
     const NS = "http://www.w3.org/2000/svg";

@@ -46,36 +46,25 @@
 //     ever using Post**, and expect to debug real eBay XML-schema
 //     complaints on the first few tries. This is flagged clearly in the
 //     UI too (see the banner note once a token is saved).
-//   - TITLE/DESCRIPTION WORDING (rewritten 2026-09-12 to match
-//     CTT_ebay_listing_templates.txt, which Brody supplied as the
-//     authoritative wording from the real desktop app's src/main.js —
-//     see generateTitle()/generateDescription() and the four
-//     descriptionXxx() builders below, one per template style, built to
-//     match that file field-for-field, including its quirks: the
-//     Exclusive template's genuine blank line right before "- Condition:",
-//     and Signed's description deliberately omitting the "We ship within
-//     1-3 business days" line. This superseded an earlier reconciliation
-//     pass done before that file existed — worth knowing if the two ever
-//     seem to disagree, this file wins.
-//       - One deliberate reintroduction worth flagging: Signed's
-//         description again mentions a "Popshield Soft Protector" by
-//         name, straight from the template file. An earlier build had
-//         dropped that line based on Brody's stated preference to never
-//         mention protectors unless a listing explicitly includes one —
-//         this file's arrival is being treated as the newer, more
-//         specific instruction, but it's a direct reversal of that
-//         preference, so it's called out here rather than silently
-//         changed back.
-//       - Title still appends " - IN HAND - SHIPS FAST!" when the base
-//         title is under 80 chars — Brody's separate standing preference,
-//         which the template file doesn't mention either way, so it's
-//         layered on afterward via applyInHandSuffix() regardless of
-//         template.
+//   - TITLE/DESCRIPTION WORDING matches
+//     CTT_ebay_listing_templates.txt (updated 2026-10-21 from Brody's
+//     "UPDATED CTT EBAY LISTING TEMPLATES" PDF), mirroring the desktop
+//     app's src/main.js — see generateTitle()/generateDescription() and
+//     the five descriptionXxx() builders below, one per template style
+//     (Common/Exclusive/Limited Edition/Signed/Convention Preorder). That
+//     file's drop rule applies throughout: a blank field takes its label
+//     and punctuation with it, and "X or Y" closings keep only the filled
+//     side. Limited Edition and Convention Preorder pick the Hard Stack vs.
+//     soft protector line from the piece count (5,000 or less = Hard Stack).
+//       - Title still appends " - IN HAND - SHIPS FAST!" when it fits
+//         under 80 chars — Brody's separate standing preference, layered
+//         on afterward via applyInHandSuffix() — except for Convention
+//         Preorder, whose titles must end in "PRESALE" per that file.
 //       - The `multiQuantity` checkbox (and its "Multiple units
 //         available…" disclaimer line) is also not in the template file —
 //         kept as an additive, explicit-per-listing feature per Brody's
-//         earlier request, inserted by appendEbayClosing() only when that
-//         listing's checkbox is on.
+//         earlier request, inserted by assembleDescription() only when
+//         that listing's checkbox is on.
 //   - Added beyond the documented spec: the title-only manual-edit lock is
 //     documented; a matching lock for the description was added too (same
 //     UX, own "regenerate" button) so hand-edits to a description can't be
@@ -86,7 +75,7 @@
 //     lookup box above it, which overwrites Name/#/Line/License together
 //     from a picked match rather than letting you type a one-off edit.
 
-const EBAY_TEMPLATES = ["Common", "Exclusive", "Limited Edition", "Signed"];
+const EBAY_TEMPLATES = ["Common", "Exclusive", "Limited Edition", "Signed", "Convention Preorder"];
 const EBAY_CONDITIONS = [
   { label: "New", id: 1000 },
   { label: "Like New", id: 3000 },
@@ -213,12 +202,10 @@ function saveEbaySettings(settings) {
 
 function fieldVisibleForTemplate(key, templateStyle) {
   switch (key) {
-    case "variant":
-      return templateStyle !== "Signed";
     case "exclusive":
-      return templateStyle === "Exclusive" || templateStyle === "Limited Edition";
+      return templateStyle !== "Common";
     case "pieceCount":
-      return templateStyle === "Limited Edition";
+      return templateStyle === "Limited Edition" || templateStyle === "Convention Preorder";
     case "signedBy":
     case "authCompany":
     case "coaNumber":
@@ -230,197 +217,294 @@ function fieldVisibleForTemplate(key, templateStyle) {
 
 // ---------- Title / description generation ----------
 
+// Drop rule (all templates, per CTT_ebay_listing_templates.txt): a blank
+// field takes its attached label/symbol/punctuation with it, Item-details
+// lines with a blank field are omitted, and "X or Y" closings keep only
+// the filled side (or vanish if both are blank).
+const EBAY_SHIP_PHRASE = " We ship within 1-3 business days.";
+const EBAY_SHIP_SOFT = "This pop is shipped in a standard soft protector and packed carefully to ensure safe delivery.";
+const EBAY_SHIP_HARD_STACK = "This pop is shipped in a Funko branded Limited Edition Hard Stack Protector and packed carefully to ensure safe delivery.";
+const EBAY_HARD_STACK_MAX_PCS = 5000;
+const EBAY_PHOTOS_NOTE = " (See photos, Feel free to message us for additional photos!)";
+
 /** Appends the "- IN HAND - SHIPS FAST!" suffix per Brody's current stated
  * preference when it fits within the 80-char eBay title cap; otherwise
- * leaves the base title as-is (truncating only if the base itself is
- * already over the cap). */
+ * leaves the base title as-is — never truncated, so an over-80 base keeps
+ * its "COA"/"pcs" ending and the card's title meter flags it for a hand
+ * trim instead. Never used for Convention Preorder (presale). */
 function applyInHandSuffix(base) {
   const SUFFIX = " - IN HAND - SHIPS FAST!";
-  if (base.length >= EBAY_TITLE_MAX) return base.slice(0, EBAY_TITLE_MAX);
   const withSuffix = base + SUFFIX;
   return withSuffix.length <= EBAY_TITLE_MAX ? withSuffix : base;
-}
-
-/** True for a piece-count/etc. value that's a plain integer string (e.g.
- * "250"), false for anything else (e.g. "1 of 1", "", null/undefined) —
- * matches the port guide's "if not a plain number, use it as-is instead"
- * rule used for both title and description generation. */
-function isPlainNumber(v) {
-  return /^\d+$/.test(String(v ?? "").trim());
 }
 
 function ebayField(listing, key) {
   return String(listing[key] ?? "").trim();
 }
 
-/** Builds the title exactly per CTT_ebay_listing_templates.txt (supplied
- * 2026-09-12) — one branch per template style, each dropping its optional
- * bracketed segments when blank exactly as that file documents. The
- * "- IN HAND - SHIPS FAST!" suffix is Brody's separate standing preference
- * (postdates the template file, which doesn't mention it) and is still
- * applied afterward, to whichever base title comes out below. */
+/** Every template field, trimmed, plus the piece-count helpers. "5000" and
+ * "5,000" both count as a plain number (gets "pcs"); "1 of 1" doesn't. */
+function ebayFields(listing) {
+  const f = {};
+  for (const key of ["line", "license", "name", "number", "variant", "exclusive", "pieceCount", "signedBy", "authCompany", "coaNumber"]) {
+    f[key] = ebayField(listing, key);
+  }
+  f.condition = ebayField(listing, "condition") || "New";
+  f.pieceIsNumeric = /^(\d+|\d{1,3}(,\d{3})+)$/.test(f.pieceCount);
+  return f;
+}
+
+const joinWords = (...parts) => parts.filter(Boolean).join(" ");
+
+/** "Funko Pop! Line License:" with blank Line/License dropped. */
+const popPrefix = (lead, line, license) => (line || license ? `${joinWords(lead, line, license)}:` : lead);
+
+const pcsLabel = (f) => (f.pieceCount ? (f.pieceIsNumeric ? `${f.pieceCount}pcs` : f.pieceCount) : "");
+
+/** Last whole number in the piece count ("5,000" → 5000, "1 of 1" → 1), or null. */
+function pieceNumber(pieceCount) {
+  const nums = String(pieceCount).replace(/,/g, "").match(/\d+/g);
+  return nums ? Number(nums[nums.length - 1]) : null;
+}
+
+function protectorLine(f) {
+  const n = pieceNumber(f.pieceCount);
+  return n !== null && n <= EBAY_HARD_STACK_MAX_PCS ? EBAY_SHIP_HARD_STACK : EBAY_SHIP_SOFT;
+}
+
+function lineLicenseDetail(f) {
+  if (f.line && f.license) return `- Line & License: ${f.line} - ${f.license}`;
+  if (f.line) return `- Line: ${f.line}`;
+  if (f.license) return `- License: ${f.license}`;
+  return "";
+}
+
+/** "A must have for any [a] fan or [b] collector!" → keeps only the filled side. */
+function mustHave(a, aNoun, b, bNoun) {
+  const sides = [a && `${a} ${aNoun}`, b && `${b} ${bNoun}`].filter(Boolean);
+  return sides.length ? `A must have for any ${sides.join(" or ")}!` : "";
+}
+
+/** ", clause1, clause2," inserted before "to your collection!" — nothing if no clauses. */
+function clauseTail(clauses, joiner = ", ") {
+  const c = clauses.filter(Boolean);
+  return c.length ? `, ${c.join(joiner)},` : "";
+}
+
+const characterLine = (f) => `- Character: ${joinWords(f.name, f.number && `#${f.number}`)}`;
+const conditionLine = (f) => `- Condition: ${f.condition}${EBAY_PHOTOS_NOTE}`;
+const exclusiveLine = (f) => f.exclusive && `- Exclusive: ${f.exclusive} Exclusive`;
+const variantLine = (f) => f.variant && `- Variant: ${f.variant}`;
+
+function cleanEbayText(s) {
+  return String(s)
+    .split("\n")
+    .map((l) => l.replace(/[ \t]{2,}/g, " ").replace(/ +([,!:])/g, "$1").replace(/,{2,}/g, ",").trim())
+    .join("\n")
+    .trim();
+}
+
+/** Paragraphs are arrays of lines; blank lines and empty paragraphs drop
+ * out. The `multiQuantity` checkbox's "Multiple units available…" line
+ * (Brody's earlier request, not in the template file) is slotted in just
+ * before the closing pitch — `closingAt` is that pitch's paragraph index. */
+function assembleDescription(listing, paragraphs, closingAt) {
+  const paras = [...paragraphs];
+  if (listing.multiQuantity) paras.splice(closingAt, 0, "Multiple units available — all near mint condition.");
+  return paras
+    .map((p) => (Array.isArray(p) ? p : [p]).filter(Boolean).join("\n"))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+// ── Convention Preorder ───────────────────────────────────────────────────
+// The exclusive field holds the convention's full name (or a known abbr).
+const CONVENTION_ABBREVIATIONS = {
+  "new york comic con": "NYCC",
+  "san diego comic con": "SDCC",
+  "emerald city comic con": "ECCC",
+};
+const CONVENTION_SKIP_WORDS = new Set(["of", "the", "and", "in", "at", "for", "&"]);
+
+function normalizeConventionName(s) {
+  return String(s ?? "").toLowerCase().replace(/[^a-z0-9& ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Returns { full, abbr } from whatever is typed in the exclusive field. */
+function resolveConvention(raw) {
+  const input = String(raw ?? "").trim();
+  if (!input) return { full: "", abbr: "" };
+  const key = normalizeConventionName(input);
+  if (CONVENTION_ABBREVIATIONS[key]) return { full: input, abbr: CONVENTION_ABBREVIATIONS[key] };
+  for (const [full, abbr] of Object.entries(CONVENTION_ABBREVIATIONS)) {
+    if (key === abbr.toLowerCase()) return { full: full.replace(/\b\w/g, (c) => c.toUpperCase()), abbr };
+  }
+  const initials = key.split(" ").filter((w) => w && !CONVENTION_SKIP_WORDS.has(w)).map((w) => w[0]).join("").toUpperCase();
+  return { full: input, abbr: initials };
+}
+
+/** Presale title — must end in "PRESALE" (eBay policy), never gets the IN
+ * HAND suffix. Over 80 chars → drop #, then Variant, then Line, then pcs,
+ * then whole words off the end of Name. License, "[Abbr] [YY] EXCL" and
+ * PRESALE always stay. */
+function conventionTitle(f) {
+  const conv = resolveConvention(f.exclusive);
+  const yy = String(new Date().getFullYear()).slice(-2);
+  const t = {
+    line: f.line,
+    number: f.number && `#${f.number}`,
+    variant: f.variant,
+    pcs: pcsLabel(f),
+    nameWords: f.name.split(/\s+/).filter(Boolean),
+  };
+  const convTag = conv.abbr && `${conv.abbr} ${yy} EXCL`;
+  const render = () =>
+    cleanEbayText(joinWords(popPrefix("Funko Pop!", t.line, f.license), t.nameWords.join(" "), t.variant, t.number, convTag, t.pcs, "PRESALE"));
+
+  for (const key of ["number", "variant", "line", "pcs"]) {
+    if (render().length <= EBAY_TITLE_MAX) break;
+    t[key] = "";
+  }
+  while (render().length > EBAY_TITLE_MAX && t.nameWords.length > 1) t.nameWords.pop();
+  return render();
+}
+
+/** Builds the title exactly per CTT_ebay_listing_templates.txt (updated
+ * 2026-10-21) — one branch per template style. The "- IN HAND - SHIPS
+ * FAST!" suffix is Brody's separate standing preference and is still
+ * applied afterward, except to presale (Convention Preorder) titles. */
 function generateTitle(listing) {
-  const line = ebayField(listing, "line");
-  const license = ebayField(listing, "license");
-  const name = ebayField(listing, "name");
-  const number = ebayField(listing, "number");
-  const variant = ebayField(listing, "variant");
-  const exclusive = ebayField(listing, "exclusive");
-  const pieceCount = ebayField(listing, "pieceCount");
-  const signedBy = ebayField(listing, "signedBy");
-  const authCompany = ebayField(listing, "authCompany");
+  const f = ebayFields(listing);
+  const common = joinWords(popPrefix("Funko Pop!", f.line, f.license), f.name, f.variant, f.number && `#${f.number}`);
+  const withExcl = joinWords(common, f.exclusive && `${f.exclusive} Excl`);
   let base;
 
-  if (listing.templateStyle === "Signed") {
-    base = `SIGNED Funko Pop! ${line} ${license}: ${name}`;
-    if (number) base += ` #${number}`;
-    base += " -";
-    if (signedBy) base += ` ${signedBy}`;
-    if (authCompany) base += ` ${authCompany}`;
-    base += " COA";
-  } else {
-    base = `Funko Pop! ${line} ${license}: ${name}`;
-    if (variant) base += ` ${variant}`;
-    if (exclusive && fieldVisibleForTemplate("exclusive", listing.templateStyle)) base += ` ${exclusive} Excl`;
-    if (number) base += ` #${number}`;
-    if (listing.templateStyle === "Limited Edition" && pieceCount) {
-      base += isPlainNumber(pieceCount) ? ` ${pieceCount}pcs` : ` ${pieceCount}`;
-    }
+  switch (listing.templateStyle) {
+    case "Convention Preorder":
+      return conventionTitle(f);
+    case "Exclusive":
+      base = withExcl;
+      break;
+    case "Limited Edition":
+      base = joinWords(withExcl, pcsLabel(f));
+      break;
+    case "Signed":
+      base = joinWords(f.signedBy, "SIGNED", withExcl, f.authCompany, "COA");
+      break;
+    default:
+      base = common;
   }
-
-  base = base.replace(/\s+/g, " ").trim();
-  return applyInHandSuffix(base);
+  return applyInHandSuffix(cleanEbayText(base));
 }
 
-/** Appends the two closing paragraphs every template ends with — the
- * collector pitch (its wording is the one thing that varies by template)
- * and the standing "Any questions?" line — with Brody's explicit
- * multi-quantity disclaimer slotted in just before them when the
- * per-listing checkbox is on. That checkbox is an addition on top of the
- * template file (which doesn't mention multi-quantity at all) from
- * Brody's earlier stated preference: never imply multiple units unless a
- * listing explicitly says so. */
-function appendEbayClosing(lines, listing, collectorLine) {
-  if (listing.multiQuantity) {
-    lines.push("");
-    lines.push("Multiple units available — all near mint condition.");
-  }
-  lines.push("");
-  lines.push(collectorLine);
-  lines.push("");
-  lines.push("Any questions? Message us and we'll get back to you ASAP!");
+function popIntro(f, lead = "Add this Funko Pop!") {
+  return joinWords(popPrefix(lead, f.line, f.license), f.name, f.variant, f.number && `#${f.number}`);
 }
 
-function descriptionCommon(listing, line, license, name, number, variant, condition) {
-  let intro = `Add this Funko Pop! ${line} ${license}: ${name}`;
-  if (variant) intro += ` ${variant}`;
-  if (number) intro += ` #${number}`;
-  intro += " to your collection!";
-
-  const lines = [intro.replace(/\s+/g, " ").trim(), ""];
-  lines.push("This pop is packed carefully to ensure safe delivery. We ship within 1-3 business days.", "", "Item details:");
-  lines.push(`- Character: ${name}${number ? ` #${number}` : ""}`);
-  lines.push(license ? `- Line & License: ${line} - ${license}` : `- Line: ${line}`);
-  if (variant) lines.push(`- Variant: ${variant}`);
-  lines.push(`- Condition: ${condition} (See photos, Feel free to message us for additional photos!)`);
-  appendEbayClosing(lines, listing, `A must have for any ${line} fan or ${license} collector!`);
-  return lines.join("\n");
+function descriptionCommon(listing, f) {
+  return assembleDescription(listing, [
+    `${popIntro(f)} to your collection!`,
+    ["Item details:", characterLine(f), lineLicenseDetail(f), variantLine(f), conditionLine(f)],
+    `This pop is packed carefully to ensure safe delivery.${EBAY_SHIP_PHRASE}`,
+    mustHave(f.line, "fan", f.license, "collector"),
+    "Any questions? Message us and we'll get back to you ASAP!",
+  ], 3);
 }
 
-function descriptionExclusive(listing, line, license, name, number, variant, condition) {
-  const exclusive = ebayField(listing, "exclusive");
-  let intro = `Add this Funko Pop! ${line} ${license}: ${name}`;
-  if (variant) intro += ` ${variant}`;
-  if (number) intro += ` #${number}`;
-  intro += " to your collection!";
-
-  const lines = [intro.replace(/\s+/g, " ").trim(), ""];
-  lines.push("This pop is packed carefully to ensure safe delivery. We ship within 1-3 business days.", "", "Item details:");
-  lines.push(`- Character: ${name}${number ? ` #${number}` : ""}`);
-  lines.push(license ? `- Line & License: ${line} - ${license}` : `- Line: ${line}`);
-  if (variant) lines.push(`- Variant: ${variant}`);
-  if (exclusive) lines.push(`- Exclusive: ${exclusive} Excl`);
-  lines.push(""); // genuine blank line before Condition — per the template file, not a mistake
-  lines.push(`- Condition: ${condition} (See photos, Feel free to message us for additional photos!)`);
-  appendEbayClosing(lines, listing, `A must have for any ${line} fan or ${license} collector!`);
-  return lines.join("\n");
+function descriptionExclusive(listing, f) {
+  return assembleDescription(listing, [
+    `${popIntro(f)}${clauseTail([f.exclusive && `exclusive to ${f.exclusive}`])} to your collection!`,
+    ["Item details:", characterLine(f), lineLicenseDetail(f), variantLine(f), exclusiveLine(f), conditionLine(f)],
+    `This pop is packed carefully to ensure safe delivery.${EBAY_SHIP_PHRASE}`,
+    mustHave(f.line, "fan", f.license, "collector"),
+    "Any questions? Message us and we'll get back to you ASAP!",
+  ], 3);
 }
 
-function descriptionLimitedEdition(listing, line, license, name, number, variant, condition) {
-  const exclusive = ebayField(listing, "exclusive");
-  const pieceCount = ebayField(listing, "pieceCount");
-  const pieceIsNumeric = pieceCount && isPlainNumber(pieceCount);
-
-  let intro = `Add this Rare Funko Pop! ${line} ${license}: ${name}`;
-  if (variant) intro += ` ${variant}`;
-  if (exclusive) intro += ` ${exclusive} Excl`;
-  if (number) intro += ` #${number}`;
-  if (pieceCount) intro += pieceIsNumeric ? `, limited to ${pieceCount}` : `, a ${pieceCount} rarity`;
-  intro += ", to your collection!";
-
-  const lines = [intro.replace(/\s+/g, " ").trim(), ""];
-  lines.push("This pop is shipped in pictured protector, and it is packed carefully to ensure safe delivery. We ship within 1-3 business days.", "", "Item details:");
-  lines.push(`- Character: ${name}${number ? ` #${number}` : ""}`);
-  lines.push(license ? `- Line & License: ${line} - ${license}` : `- Line: ${line}`);
-  if (variant) lines.push(`- Variant: ${variant}`);
-  if (exclusive) lines.push(`- Exclusive: ${exclusive} Excl`);
-  if (pieceCount) lines.push(pieceIsNumeric ? `- Limited to ${pieceCount}pcs` : `- Rarity: ${pieceCount}`);
-  lines.push(`- Condition: ${condition} (See photos, Feel free to message us for additional photos!)`);
-  appendEbayClosing(lines, listing, `A must have for any ${license} fan or limited edition collector!`);
-  return lines.join("\n");
+function descriptionLimitedEdition(listing, f) {
+  const pieceClause = f.pieceCount && (f.pieceIsNumeric ? `limited to ${f.pieceCount}` : `a ${f.pieceCount} rarity`);
+  const pieceDetail = f.pieceCount && (f.pieceIsNumeric ? `- Limited to ${f.pieceCount}pcs` : `- Rarity: ${f.pieceCount}`);
+  return assembleDescription(listing, [
+    `${popIntro(f, "Add this Rare Funko Pop!")}${clauseTail([f.exclusive && `exclusive to ${f.exclusive}`, pieceClause], ", and ")} to your collection!`,
+    ["Item details:", characterLine(f), lineLicenseDetail(f), variantLine(f), exclusiveLine(f), pieceDetail, conditionLine(f)],
+    `${protectorLine(f)}${EBAY_SHIP_PHRASE}`,
+    mustHave(f.license, "fan", "limited edition", "collector"),
+    "Any questions? Message us and we'll get back to you ASAP!",
+  ], 3);
 }
 
-function descriptionSigned(listing, line, license, name, number, variant, condition) {
-  const exclusive = ebayField(listing, "exclusive");
-  const signedBy = ebayField(listing, "signedBy");
-  const authCompany = ebayField(listing, "authCompany");
-  const coaNumber = ebayField(listing, "coaNumber");
+function descriptionSigned(listing, f) {
+  const clauses = [
+    f.exclusive && `exclusive to ${f.exclusive}`,
+    f.signedBy && `signed by ${f.signedBy}`,
+    f.authCompany && `with COA from ${f.authCompany}`,
+  ];
+  return assembleDescription(listing, [
+    `${popIntro(f)}${clauseTail(clauses)} to your collection!`,
+    [
+      "Item details:",
+      `- Character: ${f.name}`,
+      f.signedBy && `- Signed by: ${f.signedBy}`,
+      f.authCompany && `- Authentication: ${f.authCompany}`,
+      f.coaNumber && `- COA #: ${f.coaNumber}`,
+      variantLine(f),
+      exclusiveLine(f),
+      conditionLine(f),
+    ],
+    `This pop is shipped in pictured protector and packed carefully to ensure safe delivery.${EBAY_SHIP_PHRASE}`,
+    mustHave(f.license, "fan", "autograph", "collector"),
+    "Any questions? Message us and we'll get back to you ASAP!",
+  ], 3);
+}
 
-  let intro = `Add this Funko Pop! ${line} ${license}: ${name}`;
-  if (number) intro += ` #${number}`;
-  intro += `, signed by ${signedBy}`;
-  if (authCompany) intro += `, with COA from ${authCompany}`;
-  intro += ", to your collection!";
-
-  const lines = [intro.replace(/\s+/g, " ").trim(), ""];
-  // Deliberately no "We ship within 1-3 business days" line here — the
-  // template file explicitly calls out that Signed omits it.
-  lines.push("This signed pop ships in a standard Popshield Soft Protector, and is packed carefully to ensure safe delivery.", "", "Item details:");
-  lines.push(`- Character: ${name}`);
-  lines.push(`- Signed by: ${signedBy}`);
-  if (authCompany) lines.push(`- Authentication: ${authCompany}`);
-  if (coaNumber) lines.push(`- COA #: ${coaNumber}`);
-  const variantExcl = [variant, exclusive ? `${exclusive} Excl` : ""].filter(Boolean).join(" ");
-  if (variantExcl) lines.push(`- Variant: ${variantExcl}`);
-  lines.push(`- Condition: ${condition} (See photos, Feel free to message us for additional photos!)`);
-  appendEbayClosing(lines, listing, `A must have for any ${license} fan or autograph collector!`);
-  return lines.join("\n");
+function descriptionConvention(listing, f) {
+  const conv = resolveConvention(f.exclusive);
+  const year = String(new Date().getFullYear());
+  const clauses = [conv.full && `Exclusive to ${conv.full} ${year}`, f.pieceCount && `Limited to ${pcsLabel(f)}`];
+  const who = [f.license, conv.abbr].filter(Boolean).join(" or ");
+  const intro = joinWords(popPrefix("Add this rare & convention exclusive Funko Pop!", f.line, f.license), f.name);
+  return assembleDescription(listing, [
+    `${intro}${clauseTail(clauses)} to your collection!`,
+    [
+      "Item details:",
+      `- Character: ${f.name}`,
+      lineLicenseDetail(f),
+      variantLine(f),
+      conv.full && `- Convention Exclusive: ${conv.full}`,
+      f.pieceCount && `- Rarity: ${f.pieceCount}`,
+      `- Condition: ${f.condition}`,
+      `- Sticker: ${joinWords("OFFICIAL", conv.abbr && `${conv.abbr} ${year}`, "Convention Sticker")}`,
+    ],
+    protectorLine(f),
+    who && `A must have for any ${who} collector!`,
+    "Any Questions? Message us and we'll get back to you ASAP!",
+    "(Please Note: This item is a PRESALE and will ship within 2-5 days following the convention's conclusion. Due to the nature of presale items, we are unable to accept cancellations or refunds once a purchase is made.)",
+  ], 3);
 }
 
 /** Builds the description exactly per CTT_ebay_listing_templates.txt
- * (supplied 2026-09-12) — see the four descriptionXxx() builders above,
- * one per template style, each following that file's wording/paragraph
- * order/blank-line quirks (including the Exclusive template's genuine
- * blank line before "- Condition:", and Signed's missing "We ship within
- * 1-3 business days" line — both deliberate per that file, not bugs). */
+ * (updated 2026-10-21) — one descriptionXxx() builder per template style,
+ * mirroring the desktop app's src/main.js. */
 function generateDescription(listing) {
-  const line = ebayField(listing, "line");
-  const license = ebayField(listing, "license");
-  const name = ebayField(listing, "name");
-  const number = ebayField(listing, "number");
-  const variant = ebayField(listing, "variant");
-  const condition = ebayField(listing, "condition") || "New";
-
+  const f = ebayFields(listing);
+  let text;
   switch (listing.templateStyle) {
     case "Exclusive":
-      return descriptionExclusive(listing, line, license, name, number, variant, condition);
+      text = descriptionExclusive(listing, f);
+      break;
     case "Limited Edition":
-      return descriptionLimitedEdition(listing, line, license, name, number, variant, condition);
+      text = descriptionLimitedEdition(listing, f);
+      break;
     case "Signed":
-      return descriptionSigned(listing, line, license, name, number, variant, condition);
+      text = descriptionSigned(listing, f);
+      break;
+    case "Convention Preorder":
+      text = descriptionConvention(listing, f);
+      break;
     default:
-      return descriptionCommon(listing, line, license, name, number, variant, condition);
+      text = descriptionCommon(listing, f);
   }
+  return cleanEbayText(text);
 }
 
 /** Runs generation, respecting each field's manual-edit lock — call this

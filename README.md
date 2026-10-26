@@ -49,6 +49,10 @@ A fourth tab, **Booth Layouts**, for planning how the booth is set up per show. 
 
 Not built yet (see the project's `ctt-booth-layout-manager-plan.md`): creating new booth templates in-app, and the overview map.
 
+## Listings (new — Listings Overview phase 1)
+
+A fifth tab, **Listings**: a read-only view of everything active on eBay (including items listed directly on eBay, not through this app) and every eBay sale from the last 7 / 30 / 90 days (eBay won't return older orders). Sales whose listing still has units left are tagged **still live on eBay**. It reads with the eBay token from the eBay tab's ⚙ Settings and never changes anything. Mercari / Whatnot / FB, Inventory matching and the "Pull these" list are later phases of `ctt-listings-overview-plan.md`.
+
 ## What's here vs. not
 
 **Inventory**: Pops only (no Autographs), full grid with virtualization/search/filters/multi-sort, add-as-you-type row, inline edit, delete.

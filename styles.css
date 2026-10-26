@@ -658,3 +658,8 @@ main { padding: 1.25rem; }
   .bl-row-actions { width: 100%; justify-content: flex-start; }
 }
 .bl-diagram.viewing .bl-block { pointer-events: auto; }
+
+/* ---------- Listings Overview ---------- */
+.lst-heading { margin: 1.1rem 0 0.5rem; font-size: 1rem; color: var(--navy); }
+.lst-thumb { width: 44px; height: 44px; flex: none; border-radius: 6px; object-fit: cover; background: #e9eaf2; }
+.lst-badge-live { background: var(--yellow); color: var(--navy); }

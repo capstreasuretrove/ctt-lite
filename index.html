@@ -31,6 +31,7 @@
       <button class="tab-btn" data-tab="consignment">Consignment</button>
       <button class="tab-btn" data-tab="ebay">eBay</button>
       <button class="tab-btn" data-tab="layouts">Booth Layouts</button>
+      <button class="tab-btn" data-tab="listings">Listings</button>
     </nav>
   </header>
 
@@ -166,6 +167,27 @@
       <div id="bl-editor" hidden></div>
       <datalist id="bl-suggest"></datalist>
     </section>
+    <!-- Listings Overview tab (phase 1: eBay active + recently sold, read-only) -->
+    <section id="tab-listings" class="tab-panel">
+      <div id="lst-banner" class="banner" hidden></div>
+
+      <div class="inv-toolbar">
+        <input type="text" id="lst-search" placeholder="Search title / item #…" class="toolbar-input" style="flex:1; min-width:200px;" />
+        <select id="lst-days" class="toolbar-input">
+          <option value="7">Sold: last 7 days</option>
+          <option value="30" selected>Sold: last 30 days</option>
+          <option value="90">Sold: last 90 days</option>
+        </select>
+        <span id="lst-count" class="inv-count"></span>
+        <button id="lst-refresh" class="secondary-btn">↻ Refresh</button>
+      </div>
+
+      <h3 class="lst-heading">Recently sold</h3>
+      <div id="lst-sold" class="bl-list"></div>
+
+      <h3 class="lst-heading">Active listings</h3>
+      <div id="lst-active" class="bl-list"></div>
+    </section>
   </main>
 </div>
 
@@ -184,6 +206,7 @@
 <script src="js/consignment.js"></script>
 <script src="js/ebay.js"></script>
 <script src="js/layouts.js"></script>
+<script src="js/listings.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

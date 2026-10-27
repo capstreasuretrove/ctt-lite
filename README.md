@@ -49,7 +49,7 @@ A fourth tab, **Booth Layouts**, for planning how the booth is set up per show. 
 
 Not built yet (see the project's `ctt-booth-layout-manager-plan.md`): creating new booth templates in-app, and the overview map.
 
-## Listings (Listings Overview phases 1–2)
+## Listings (Listings Overview phases 1–3)
 
 A fifth tab, **Listings**, showing everything live on eBay, Mercari, Whatnot and FB in one list, grouped by Inventory item, plus every sale from the last 7 / 30 / 90 days.
 
@@ -59,6 +59,7 @@ A fifth tab, **Listings**, showing everything live on eBay, Mercari, Whatnot and
 - **+ Add listings** (Mercari / Whatnot / FB): pick the platform, search Inventory, tap items into the list, optionally set price/qty, Save once.
 - **Copy eBay listings to …** (inside + Add listings): for a platform filled by bulk-importing the eBay store. Lists every live eBay listing, all ticked (ones already copied are unticked), and saves each as a listing there with the same Inventory link, price and qty.
 - **Sold** on a Mercari/Whatnot/FB chip marks one unit sold (a qty-2 listing keeps 1 live). **✕** = taken down without selling. Both show an Undo toast; a sold row in "Recently sold" also has **Undo**.
+- **Exported — waiting for you to upload** (phase 3): every FB/Whatnot export from the desktop app shows up here as a batch. **I uploaded this file** opens the batch: ticked listings go live, unticked ones (didn't make it) are removed. Exported cards that weren't filled from the Inventory lookup get a **Match** button (also in Match them).
 - Nothing here changes Inventory Qty — that's the later "Commit" step.
 
 **Setup (once):** these need the new "CTT - Listings Overview" sheet. Follow the steps at the top of `listings-overview-apps-script.txt` (project folder), then paste the Web app URL into `js/config.js` as `LISTINGS_SCRIPT_URL` and redeploy. Until then the tab still shows eBay and says the sheet isn't set up.

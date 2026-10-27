@@ -658,6 +658,7 @@ function lstCloseModal() {
 function lstRenderModal() {
   if (!lstModal) return;
   if (lstModal.kind === "match") lstRenderMatch();
+  else if (lstModal.kind === "copy") lstRenderCopy();
   else lstRenderAdd();
 }
 
@@ -747,6 +748,7 @@ function lstRenderAdd() {
 <div class="lst-seg">
   ${LST_MANUAL_PLATFORMS.map((p) => `<button class="lst-seg-btn${p.key === m.platform ? " active" : ""}" data-act="platform" data-p="${p.key}">${p.label}</button>`).join("")}
 </div>
+<div class="lst-copy-hint">Bulk-imported your eBay listings? <button class="secondary-btn lst-small" data-act="copy-ebay">Copy eBay listings to ${escapeHtml(lstPlatformLabel(m.platform))}…</button></div>
 <input type="text" id="lst-add-search" class="toolbar-input lst-modal-search" placeholder="Search Inventory to add (name, #, line, owner)…" value="${escapeHtml(m.search)}" />
 <div id="lst-add-results" class="lst-pick-list"></div>
 <div id="lst-add-pending"></div>`;
@@ -822,6 +824,76 @@ async function lstSaveAdd() {
   lstToast(`Added ${rows.length} listing${rows.length === 1 ? "" : "s"} on ${label}.`);
 }
 
+// Copy: every live eBay listing becomes a listing on another platform with the
+// same Inventory link, price and qty — for platforms filled by a bulk import
+// of the eBay store. platformRef "ebay:<ItemID>" remembers where it came from,
+// and is how already-copied listings are recognised.
+function lstOpenCopy(platform) {
+  const rows = lstActive.map((a) => {
+    const match = lstMatches.get(a.itemId) || null;
+    const linked = match && match.inventoryId !== "ignore";
+    const copied = lstCross.some((c) => c.platform === platform && lstIsLive(c) && c.platformRef === `ebay:${a.itemId}`);
+    return { a, match: linked ? match : null, item: linked ? lstInvFor(match) : null, copied, checked: !copied };
+  });
+  rows.sort((x, y) => (x.item ? lstItemName(x.item) : x.a.title).localeCompare(y.item ? lstItemName(y.item) : y.a.title, undefined, { numeric: true, sensitivity: "base" }));
+  lstModal = { kind: "copy", platform, rows };
+  lstRenderModal();
+}
+
+function lstRenderCopy() {
+  const m = lstModal;
+  const label = escapeHtml(lstPlatformLabel(m.platform));
+  const n = m.rows.filter((r) => r.checked).length;
+  document.getElementById("lst-modal-body").innerHTML = `
+<h3 class="lst-modal-title">Copy eBay listings to ${label}</h3>
+<div class="lst-pick-heading">Untick anything that isn't on ${label}. Each copy keeps the eBay listing's Inventory link, price and qty.</div>
+<div class="lst-copy-tools">
+  <button class="secondary-btn lst-small" data-act="copy-all">Tick all</button>
+  <button class="secondary-btn lst-small" data-act="copy-none">Untick all</button>
+  <span class="lst-muted">${n} of ${m.rows.length} ticked</span>
+</div>
+<div class="lst-pick-list">
+${m.rows
+  .map(
+    (r, idx) => `<label class="lst-copy-row">
+  <input type="checkbox" class="lst-copy-check" data-idx="${idx}"${r.checked ? " checked" : ""} />
+  <span class="lst-copy-main">
+    <span class="lst-pick-name">${escapeHtml(r.item ? lstItemName(r.item) : r.a.title)}</span>
+    <span class="lst-pick-sub">${lstMoney(r.a.price)}${r.a.qty > 1 ? " · Qty " + r.a.qty : ""}${r.item ? "" : r.match === null && lstMatches.has(r.a.itemId) ? " · not an inventory item" : " · no Inventory link"}${r.copied ? ` · <strong>already on ${label}</strong>` : ""}</span>
+  </span>
+</label>`
+  )
+  .join("")}
+</div>
+<div class="lst-modal-actions">
+  <button class="secondary-btn" data-act="copy-back">Back</button>
+  <button class="primary-btn" data-act="copy-save"${n ? "" : " disabled"}>Save ${n} to ${label}</button>
+</div>`;
+}
+
+async function lstSaveCopy() {
+  const m = lstModal;
+  const today = todayIso();
+  const rows = m.rows
+    .filter((r) => r.checked)
+    .map((r) => ({
+      inventoryId: r.match ? r.match.inventoryId : "",
+      inventorySource: r.match ? r.match.inventorySource || "inventory" : "",
+      platform: m.platform,
+      platformRef: `ebay:${r.a.itemId}`,
+      title: r.item ? lstItemName(r.item) : r.a.title,
+      price: String(r.a.price || ""),
+      qty: String(Math.max(1, r.a.qty || 1)),
+      listedDate: today,
+      status: "live",
+    }));
+  const res = await lstApi({ action: "addCrossListings", rows });
+  lstCross.push(...(res.rows || []));
+  const label = lstPlatformLabel(m.platform);
+  lstCloseModal();
+  lstToast(`Added ${rows.length} listing${rows.length === 1 ? "" : "s"} on ${label}.`);
+}
+
 function lstOnModalClick(e) {
   if (e.target.id === "lst-overlay") {
     lstCloseModal();
@@ -836,8 +908,23 @@ function lstOnModalClick(e) {
     else if (act === "skip") lstNextMatch();
     return;
   }
+  if (lstModal.kind === "copy") {
+    const m = lstModal;
+    if (act === "copy-all" || act === "copy-none") {
+      m.rows.forEach((r) => (r.checked = act === "copy-all"));
+      lstRenderCopy();
+    } else if (act === "copy-back") {
+      lstOpenModal({ kind: "add", platform: m.platform, search: "", pending: [] });
+    } else if (act === "copy-save") {
+      lstRun(lstSaveCopy);
+    }
+    return;
+  }
   const m = lstModal;
-  if (act === "platform") {
+  if (act === "copy-ebay") {
+    if (m.pending.length && !confirm("Discard the listings you haven't saved?")) return;
+    lstOpenCopy(m.platform);
+  } else if (act === "platform") {
     m.platform = btn.dataset.p;
     lstRenderAdd();
   } else if (act === "pick") {
@@ -856,6 +943,16 @@ function lstOnModalClick(e) {
 
 function lstOnModalInput(e) {
   const el = e.target;
+  if (lstModal && lstModal.kind === "copy" && el.classList.contains("lst-copy-check")) {
+    const r = lstModal.rows[Number(el.dataset.idx)];
+    if (r && r.checked !== el.checked) {
+      r.checked = el.checked;
+      const scroll = el.closest(".lst-pick-list").scrollTop;
+      lstRenderCopy();
+      document.querySelector("#lst-modal-body .lst-pick-list").scrollTop = scroll;
+    }
+    return;
+  }
   if (!lstModal || lstModal.kind !== "add" || !el.classList.contains("lst-pending-input")) return;
   const p = lstModal.pending[Number(el.dataset.idx)];
   if (p) p[el.dataset.field] = el.value;
@@ -888,6 +985,7 @@ function initListingsOverview() {
   const overlay = document.getElementById("lst-overlay");
   overlay.addEventListener("click", lstOnModalClick);
   overlay.addEventListener("input", lstOnModalInput);
+  overlay.addEventListener("change", lstOnModalInput);
   document.getElementById("lst-modal-close").addEventListener("click", lstCloseModal);
 
   // Loads the first time the tab is opened, not on every page load.

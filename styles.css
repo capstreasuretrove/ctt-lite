@@ -732,3 +732,12 @@ main { padding: 1.25rem; }
 .lst-pending-name { flex: 1; min-width: 160px; font-weight: 600; font-size: 0.9rem; }
 .lst-pending-row label { display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; color: var(--text-muted); }
 .lst-pending-input { width: 4.5rem; padding: 0.3rem; border: 1px solid var(--border); border-radius: 4px; font: inherit; }
+.lst-copy-hint { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.7rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.lst-copy-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+.lst-copy-row {
+  display: flex; gap: 0.6rem; align-items: center; background: white; border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.45rem 0.7rem; cursor: pointer;
+}
+.lst-copy-row:hover { border-color: var(--navy); }
+.lst-copy-row input { width: 1.1rem; height: 1.1rem; flex: none; }
+.lst-copy-main { display: flex; flex-direction: column; min-width: 0; }

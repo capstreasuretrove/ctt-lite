@@ -55,7 +55,9 @@ A fifth tab, **Listings**, showing everything live on eBay, Mercari, Whatnot and
 
 - **eBay** is read live with the eBay token from the eBay tab's ⚙ Settings, including items listed directly on eBay. Sales come from eBay orders (eBay won't return orders older than 90 days). A sale whose listing still has units left is tagged **still live on eBay**.
 - **Match them**: each eBay listing gets linked to its Inventory item by hand, once. The dialog suggests likely items (name + Pop #) and lists the same Pop under each Owner separately. **Not an inventory item** puts it in the collapsed "Not inventory items" list. The ⇄ on an eBay chip changes a match.
+- **Signed items** from the Autographs tab show up in Match and Add too, marked ✍ SIGNED with the signer and COA. A title that says signed/autographed/JSA puts signed items first. Autograph rows without an ID (column P) are left out — run `backfillAutographIds` in the Inventory Apps Script to stamp them.
 - **+ Add listings** (Mercari / Whatnot / FB): pick the platform, search Inventory, tap items into the list, optionally set price/qty, Save once.
+- **Copy eBay listings to …** (inside + Add listings): for a platform filled by bulk-importing the eBay store. Lists every live eBay listing, all ticked (ones already copied are unticked), and saves each as a listing there with the same Inventory link, price and qty.
 - **Sold** on a Mercari/Whatnot/FB chip marks one unit sold (a qty-2 listing keeps 1 live). **✕** = taken down without selling. Both show an Undo toast; a sold row in "Recently sold" also has **Undo**.
 - Nothing here changes Inventory Qty — that's the later "Commit" step.
 

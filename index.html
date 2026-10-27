@@ -172,23 +172,40 @@
       <div id="lst-banner" class="banner" hidden></div>
 
       <div class="inv-toolbar">
-        <input type="text" id="lst-search" placeholder="Search title / item #…" class="toolbar-input" style="flex:1; min-width:200px;" />
+        <input type="text" id="lst-search" placeholder="Search name / title / item #…" class="toolbar-input" style="flex:1; min-width:200px;" />
         <select id="lst-days" class="toolbar-input">
           <option value="7">Sold: last 7 days</option>
           <option value="30" selected>Sold: last 30 days</option>
           <option value="90">Sold: last 90 days</option>
         </select>
         <span id="lst-count" class="inv-count"></span>
+        <button id="lst-add" class="primary-btn" disabled>+ Add listings</button>
         <button id="lst-refresh" class="secondary-btn">↻ Refresh</button>
       </div>
 
       <h3 class="lst-heading">Recently sold</h3>
       <div id="lst-sold" class="bl-list"></div>
 
-      <h3 class="lst-heading">Active listings</h3>
-      <div id="lst-active" class="bl-list"></div>
+      <h3 class="lst-heading">Live listings</h3>
+      <div id="lst-match-bar" class="lst-match-bar" hidden></div>
+      <div id="lst-live" class="bl-list"></div>
+
+      <details id="lst-ignored-wrap" class="lst-ignored" hidden>
+        <summary>Not inventory items (<span id="lst-ignored-count">0</span>)</summary>
+        <div id="lst-ignored" class="bl-list"></div>
+      </details>
+
+      <div id="lst-toast" class="lst-toast" hidden></div>
     </section>
   </main>
+</div>
+
+<!-- Listings: match-to-Inventory / add-listings dialog -->
+<div id="lst-overlay" class="ebay-card-overlay" hidden>
+  <div class="ebay-card lst-modal">
+    <button id="lst-modal-close" class="icon-btn ebay-card-close" title="Close">✕</button>
+    <div id="lst-modal-body"></div>
+  </div>
 </div>
 
 <!-- eBay listing card (Stage 2: photos, generate, verify, post) -->

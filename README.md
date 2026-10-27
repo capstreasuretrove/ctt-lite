@@ -49,9 +49,17 @@ A fourth tab, **Booth Layouts**, for planning how the booth is set up per show. 
 
 Not built yet (see the project's `ctt-booth-layout-manager-plan.md`): creating new booth templates in-app, and the overview map.
 
-## Listings (new — Listings Overview phase 1)
+## Listings (Listings Overview phases 1–2)
 
-A fifth tab, **Listings**: a read-only view of everything active on eBay (including items listed directly on eBay, not through this app) and every eBay sale from the last 7 / 30 / 90 days (eBay won't return older orders). Sales whose listing still has units left are tagged **still live on eBay**. It reads with the eBay token from the eBay tab's ⚙ Settings and never changes anything. Mercari / Whatnot / FB, Inventory matching and the "Pull these" list are later phases of `ctt-listings-overview-plan.md`.
+A fifth tab, **Listings**, showing everything live on eBay, Mercari, Whatnot and FB in one list, grouped by Inventory item, plus every sale from the last 7 / 30 / 90 days.
+
+- **eBay** is read live with the eBay token from the eBay tab's ⚙ Settings, including items listed directly on eBay. Sales come from eBay orders (eBay won't return orders older than 90 days). A sale whose listing still has units left is tagged **still live on eBay**.
+- **Match them**: each eBay listing gets linked to its Inventory item by hand, once. The dialog suggests likely items (name + Pop #) and lists the same Pop under each Owner separately. **Not an inventory item** puts it in the collapsed "Not inventory items" list. The ⇄ on an eBay chip changes a match.
+- **+ Add listings** (Mercari / Whatnot / FB): pick the platform, search Inventory, tap items into the list, optionally set price/qty, Save once.
+- **Sold** on a Mercari/Whatnot/FB chip marks one unit sold (a qty-2 listing keeps 1 live). **✕** = taken down without selling. Both show an Undo toast; a sold row in "Recently sold" also has **Undo**.
+- Nothing here changes Inventory Qty — that's the later "Commit" step.
+
+**Setup (once):** these need the new "CTT - Listings Overview" sheet. Follow the steps at the top of `listings-overview-apps-script.txt` (project folder), then paste the Web app URL into `js/config.js` as `LISTINGS_SCRIPT_URL` and redeploy. Until then the tab still shows eBay and says the sheet isn't set up.
 
 ## What's here vs. not
 

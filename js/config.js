@@ -19,6 +19,9 @@ const CONFIG = {
   // Booth Layouts — its own Apps Script Web App over the "CTT - Booth Layouts" sheet.
   LAYOUTS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzh8HIVjbnqnPD87WYmSSUwXEn6bfF21PzNB4GMe_YLLbmM3ALsGMh28VsMAsmUdHPY/exec",
   LAYOUTS_SHEET_ID: "1a61_luAQjK9Wsy-NbJisdFA-P_5YLYaIxL_r4paFm6o",
+  // Listings Overview — its own Apps Script Web App over the "CTT - Listings Overview"
+  // sheet (source: listings-overview-apps-script.txt in the project folder).
+  LISTINGS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwLQK2KRFzGHm4Q-gUl78WJUyCCH6oyg6DiKvZjh35FEIiURwcO3jzPAzZeXrWeDuDtmg/exec",
   AUTH_PASSWORD: "4141",
   // eBay's Trading API needs an auth token and imgBB needs an API key —
   // both entered via the eBay tab's Settings panel and kept only in this

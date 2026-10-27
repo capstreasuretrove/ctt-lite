@@ -595,7 +595,7 @@ function lstSearchInventory(q) {
 function lstPickButton(item, extra) {
   return `<button class="lst-pick" data-act="pick" data-inv="${escapeHtml(item.id)}">
   <span class="lst-pick-name">${escapeHtml(lstItemName(item))}</span>
-  <span class="lst-pick-sub">${escapeHtml(lstItemSub(item))}${extra || ""}</span>
+  <span class="lst-pick-sub">${escapeHtml(lstItemSub(item))}${item.chase ? ` · <strong>Chase: ${escapeHtml(item.chase)}</strong>` : ""}${extra || ""}</span>
 </button>`;
 }
 

@@ -14,6 +14,8 @@
 //     confirmed by hand once (Brody's call — no silent auto-linking); the
 //     suggestions just put the likely item first. Same Pop under several
 //     Owners shows as separate choices.
+// Signed Pops live on the Autographs tab, whose IDs are separate from
+// Inventory's, so every lookup is keyed by source + id (lstKey).
 // Nothing here changes Inventory Qty — that's the later "Commit" button.
 
 const LST_DAYS_KEY = "ctt-lite-listings-days";
@@ -35,7 +37,7 @@ let lstSold = [];
 let lstCross = []; // CrossListings rows from the sheet
 let lstMatches = new Map(); // eBay ItemID → Matches row
 let lstInv = [];
-let lstInvById = new Map();
+let lstInvById = new Map(); // lstKey(source, id) → item
 let lstSheetReady = false;
 let lstLoading = false;
 let lstBusy = false;
@@ -172,11 +174,37 @@ async function lstFetchSold(token, days) {
 
 // ---------- loading ----------
 
-// Reuses the Inventory tab's copy when it has already loaded.
+function lstKey(source, id) {
+  return `${source || "inventory"}:${id}`;
+}
+
+// Pops (reusing the Inventory tab's copy when it has already loaded) plus
+// signed items from the Autographs tab. Copies, tagged with source + key.
 async function lstLoadInventory() {
-  if (typeof items !== "undefined" && items.length) return items;
-  const res = await postToAppsScript(CONFIG.INVENTORY_SCRIPT_URL, { action: "getInventory" });
-  return (res.items || []).map(normalizeItem);
+  const popsP =
+    typeof items !== "undefined" && items.length
+      ? Promise.resolve(items)
+      : postToAppsScript(CONFIG.INVENTORY_SCRIPT_URL, { action: "getInventory" }).then((res) => (res.items || []).map(normalizeItem));
+  const [pops, agRes] = await Promise.all([popsP, postToAppsScript(CONFIG.INVENTORY_SCRIPT_URL, { action: "getAutographs" })]);
+  const signed = (agRes.items || []).map((a) => ({
+    id: String(a.id || ""),
+    name: a.name || "",
+    number: a.number || "",
+    line: a.line || "",
+    license: a.license || "",
+    qty: a.qty,
+    owner: "",
+    signedBy: a.signedBy || "",
+    authCoa: a.authCoa || "",
+  }));
+  return [
+    ...pops.map((p) => ({ ...p, source: "inventory", key: lstKey("inventory", p.id) })),
+    ...signed.filter((a) => a.id).map((a) => ({ ...a, source: "autograph", key: lstKey("autograph", a.id) })),
+  ];
+}
+
+function lstInvFor(row) {
+  return lstInvById.get(lstKey(row.inventorySource, row.inventoryId)) || null;
 }
 
 function lstDays() {
@@ -197,7 +225,7 @@ async function loadListingsOverview() {
     lstLoadInventory()
       .then((list) => {
         lstInv = list;
-        lstInvById = new Map(list.map((i) => [String(i.id), i]));
+        lstInvById = new Map(list.map((i) => [i.key, i]));
       })
       .catch(fail("Couldn't load Inventory")),
   ];
@@ -262,11 +290,12 @@ function lstItemLink(itemId, text) {
 }
 
 function lstItemName(item) {
-  return `${item.name}${item.number ? " #" + item.number : ""}`;
+  return `${item.name}${item.number ? " #" + item.number : ""}${item.source === "autograph" ? " ✍ SIGNED" : ""}`;
 }
 
 function lstItemSub(item) {
-  return [item.line, `Owner ${item.owner}`, `${item.qty || 0} in stock`].filter(Boolean).join(" · ");
+  const who = item.source === "autograph" ? (item.signedBy ? `Signed by ${item.signedBy}` : "Autographs tab") : `Owner ${item.owner}`;
+  return [item.line, who, item.authCoa, `${item.qty || 0} in stock`].filter(Boolean).join(" · ");
 }
 
 // ---------- grouping ----------
@@ -289,10 +318,10 @@ function lstBuildGroups() {
     const m = lstMatches.get(a.itemId);
     if (!m) unmatched.push(a);
     else if (m.inventoryId === "ignore") ignored.push(a);
-    else add(m.inventoryId, { platform: "ebay", ebay: a });
+    else add(lstKey(m.inventorySource, m.inventoryId), { platform: "ebay", ebay: a });
   }
   for (const c of lstCross) {
-    if (lstIsLive(c)) add(c.inventoryId || `title:${c.title}`, { platform: c.platform, cross: c });
+    if (lstIsLive(c)) add(c.inventoryId ? lstKey(c.inventorySource, c.inventoryId) : `title:${c.title}`, { platform: c.platform, cross: c });
   }
   const list = Array.from(groups.values());
   for (const g of list) {
@@ -307,7 +336,7 @@ function lstBuildGroups() {
 function lstGroupMatches(g, q) {
   if (!q) return true;
   const parts = [g.name];
-  if (g.item) parts.push(g.item.line, g.item.license, g.item.owner);
+  if (g.item) parts.push(g.item.line, g.item.license, g.item.owner, g.item.signedBy);
   for (const l of g.listings) {
     if (l.ebay) parts.push(l.ebay.title, l.ebay.itemId);
     if (l.cross) parts.push(l.cross.title, lstPlatformLabel(l.cross.platform));
@@ -386,11 +415,11 @@ function lstSoldRow(e, activeIds) {
 </div>`;
   }
   const c = e.cross;
-  const item = lstInvById.get(c.inventoryId);
+  const item = lstInvFor(c);
   return `<div class="bl-row">
   <div class="bl-row-main">
     <div class="bl-row-title">${escapeHtml(item ? lstItemName(item) : c.title || "(no title)")}</div>
-    <div class="bl-row-sub">${lstDate(c.soldDate)} · ${parseInt(c.qty, 10) || 1} × ${c.price ? lstMoney(c.price) : "no price"}${item ? " · Owner " + escapeHtml(item.owner) : ""}</div>
+    <div class="bl-row-sub">${lstDate(c.soldDate)} · ${parseInt(c.qty, 10) || 1} × ${c.price ? lstMoney(c.price) : "no price"}${item && item.owner ? " · Owner " + escapeHtml(item.owner) : ""}</div>
   </div>
   <div class="bl-row-actions"><span class="bl-badge lst-badge-${escapeHtml(c.platform)}">${escapeHtml(lstPlatformLabel(c.platform))}</span><button class="secondary-btn lst-small" data-act="unsell" data-id="${escapeHtml(c.id)}" title="Wasn't sold — put it back to live">Undo</button></div>
 </div>`;
@@ -399,7 +428,7 @@ function lstSoldRow(e, activeIds) {
 function lstSoldMatches(e, q) {
   if (!q) return true;
   if (e.ebay) return e.ebay.title.toLowerCase().includes(q) || e.ebay.itemId.includes(q);
-  const item = lstInvById.get(e.cross.inventoryId);
+  const item = lstInvFor(e.cross);
   return `${e.cross.title} ${item ? lstItemName(item) : ""} ${lstPlatformLabel(e.platform)}`.toLowerCase().includes(q);
 }
 
@@ -486,7 +515,7 @@ function lstCopyFields(c) {
 }
 
 function lstCrossLabel(c) {
-  const item = lstInvById.get(c.inventoryId);
+  const item = lstInvFor(c);
   return `${item ? lstItemName(item) : c.title} on ${lstPlatformLabel(c.platform)}`;
 }
 
@@ -516,7 +545,7 @@ async function lstMarkSold(c) {
 // sale was split off a multi-quantity listing.
 async function lstUnsell(c) {
   const sibling = lstCross.find(
-    (x) => x !== c && lstIsLive(x) && x.platform === c.platform && x.inventoryId === c.inventoryId && x.platformRef === c.platformRef
+    (x) => x !== c && lstIsLive(x) && x.platform === c.platform && x.inventoryId === c.inventoryId && x.inventorySource === c.inventorySource && x.platformRef === c.platformRef
   );
   if (sibling) {
     await lstUpdate(sibling, { qty: String((parseInt(sibling.qty, 10) || 1) + (parseInt(c.qty, 10) || 1)) });
@@ -560,10 +589,15 @@ function lstTokens(s) {
     .filter((t) => t.length >= 2 && !LST_STOPWORDS.has(t));
 }
 
+const LST_SIGNED_WORDS = ["signed", "autograph", "autographed", "auto", "jsa", "beckett", "psa", "coa"];
+
 // Likely Inventory items for an eBay title: name words found in the title,
 // boosted when the Pop # appears ("#123" counts more than a bare 123).
+// A title that says signed/autographed/JSA… leans to the Autographs tab
+// (more so when the signer's name is in it); one that doesn't leans to Pops.
 function lstSuggest(title) {
   const titleTokens = new Set(lstTokens(title));
+  const titleSigned = LST_SIGNED_WORDS.some((w) => titleTokens.has(w));
   const hashNums = new Set((title.match(/#\s?\d+[a-z]?/gi) || []).map((n) => n.replace(/[#\s]/g, "").toLowerCase()));
   return lstInv
     .map((item) => {
@@ -573,6 +607,12 @@ function lstSuggest(title) {
       const num = String(item.number || "").trim().toLowerCase();
       if (num && hashNums.has(num)) score += 4;
       else if (num && titleTokens.has(num)) score += 2;
+      if (item.source === "autograph") {
+        score += titleSigned ? 1.5 : -1.5;
+        if (lstTokens(item.signedBy).some((t) => titleTokens.has(t))) score += 1.5;
+      } else if (titleSigned) {
+        score -= 1;
+      }
       return score >= 2.5 ? { item, score } : null;
     })
     .filter(Boolean)
@@ -586,14 +626,15 @@ function lstSearchInventory(q) {
   if (!words.length) return [];
   return lstInv
     .filter((item) => {
-      const hay = `${item.name} ${item.number} ${item.line} ${item.license} ${item.owner}`.toLowerCase();
+      const signed = item.source === "autograph" ? `signed autograph ${item.signedBy} ${item.authCoa}` : "";
+      const hay = `${item.name} ${item.number} ${item.line} ${item.license} ${item.owner} ${signed}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     })
     .slice(0, 40);
 }
 
 function lstPickButton(item, extra) {
-  return `<button class="lst-pick" data-act="pick" data-inv="${escapeHtml(item.id)}">
+  return `<button class="lst-pick" data-act="pick" data-inv="${escapeHtml(item.key)}">
   <span class="lst-pick-name">${escapeHtml(lstItemName(item))}</span>
   <span class="lst-pick-sub">${escapeHtml(lstItemSub(item))}${item.chase ? ` · <strong>Chase: ${escapeHtml(item.chase)}</strong>` : ""}${extra || ""}</span>
 </button>`;
@@ -634,7 +675,7 @@ function lstRenderMatch() {
     ? ""
     : current.inventoryId === "ignore"
       ? "Currently: not an inventory item"
-      : `Currently: ${lstInvById.has(current.inventoryId) ? lstItemName(lstInvById.get(current.inventoryId)) : "an Inventory item that no longer exists"}`;
+      : `Currently: ${lstInvFor(current) ? lstItemName(lstInvFor(current)) : "an Inventory item that no longer exists"}`;
   document.getElementById("lst-modal-body").innerHTML = `
 <h3 class="lst-modal-title">Match to Inventory${queue.length > 1 ? ` <span class="lst-muted">${index + 1} of ${queue.length}</span>` : ""}</h3>
 <div class="lst-match-src">
@@ -667,9 +708,18 @@ function lstRenderMatchResults() {
     heading + (list.length ? list.map((i) => lstPickButton(i)).join("") : q ? `<div class="lst-pick-heading">Nothing in Inventory matches.</div>` : "");
 }
 
-async function lstSaveMatch(inventoryId) {
+// key: an item's lstKey, or "ignore" for "not an inventory item".
+async function lstSaveMatch(key) {
   const a = lstModal.queue[lstModal.index];
-  const match = { source: "ebay", sourceKey: a.itemId, inventoryId, inventorySource: "inventory", title: a.title };
+  const item = key === "ignore" ? null : lstInvById.get(key);
+  if (key !== "ignore" && !item) return;
+  const match = {
+    source: "ebay",
+    sourceKey: a.itemId,
+    inventoryId: item ? String(item.id) : "ignore",
+    inventorySource: item ? item.source : "",
+    title: a.title,
+  };
   await lstApi({ action: "saveMatches", matches: [match] });
   lstMatches.set(a.itemId, match);
   lstNextMatch();
@@ -710,8 +760,8 @@ function lstRenderAdd() {
   input.focus();
 }
 
-function lstLiveOn(inventoryId, platform) {
-  return lstCross.some((c) => c.inventoryId === String(inventoryId) && c.platform === platform && lstIsLive(c));
+function lstLiveOn(item, platform) {
+  return lstCross.some((c) => lstKey(c.inventorySource, c.inventoryId) === item.key && c.platform === platform && lstIsLive(c));
 }
 
 function lstRenderAddResults() {
@@ -723,8 +773,8 @@ function lstRenderAddResults() {
       ? list
           .map((i) => {
             const tags = [];
-            if (m.pending.some((p) => p.item.id === i.id)) tags.push("in the list");
-            if (lstLiveOn(i.id, m.platform)) tags.push(`already on ${label}`);
+            if (m.pending.some((p) => p.item.key === i.key)) tags.push("in the list");
+            if (lstLiveOn(i, m.platform)) tags.push(`already on ${label}`);
             return lstPickButton(i, tags.length ? ` · <strong>${escapeHtml(tags.join(", "))}</strong>` : "");
           })
           .join("")
@@ -740,7 +790,7 @@ function lstRenderAddPending() {
 ${m.pending
   .map(
     (p, idx) => `<div class="lst-pending-row">
-  <span class="lst-pending-name">${escapeHtml(lstItemName(p.item))} <span class="lst-muted">${escapeHtml(p.item.owner)}</span></span>
+  <span class="lst-pending-name">${escapeHtml(lstItemName(p.item))} <span class="lst-muted">${escapeHtml(p.item.owner || p.item.signedBy)}</span></span>
   <label>$<input type="number" min="0" step="1" class="lst-pending-input" data-field="price" data-idx="${idx}" value="${escapeHtml(p.price)}" placeholder="price" /></label>
   <label>Qty<input type="number" min="1" step="1" class="lst-pending-input" data-field="qty" data-idx="${idx}" value="${escapeHtml(p.qty)}" /></label>
   <button class="lst-chip-btn" data-act="unpend" data-idx="${idx}" title="Remove">✕</button>
@@ -756,7 +806,7 @@ async function lstSaveAdd() {
   const today = todayIso();
   const rows = m.pending.map((p) => ({
     inventoryId: String(p.item.id),
-    inventorySource: "inventory",
+    inventorySource: p.item.source,
     platform: m.platform,
     title: lstItemName(p.item),
     price: p.price === "" ? "" : String(Number(p.price) || 0),
@@ -792,7 +842,7 @@ function lstOnModalClick(e) {
     lstRenderAdd();
   } else if (act === "pick") {
     const item = lstInvById.get(btn.dataset.inv);
-    if (item && !m.pending.some((p) => p.item.id === item.id)) m.pending.push({ item, price: "", qty: "1" });
+    if (item && !m.pending.some((p) => p.item.key === item.key)) m.pending.push({ item, price: "", qty: "1" });
     lstRenderAddResults();
     lstRenderAddPending();
   } else if (act === "unpend") {

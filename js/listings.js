@@ -23,6 +23,7 @@
 // Nothing here changes Inventory Qty — that's the later "Commit" button.
 
 const LST_DAYS_KEY = "ctt-lite-listings-days";
+const LST_SORT_KEY = "ctt-lite-listings-sort";
 const LST_MAX_PAGES = 10; // sanity cap: 2000 active listings / 1000 orders
 // Tier order (Primary → Secondary → Tertiary) — display order everywhere.
 const LST_PLATFORMS = [
@@ -362,6 +363,27 @@ function lstEbayMatches(a, q) {
   return !q || a.title.toLowerCase().includes(q) || a.itemId.includes(q);
 }
 
+// ---------- sorting (live listings) ----------
+
+// price = the highest price the item is listed at on any platform;
+// platforms = how many different platforms it's live on.
+function lstSortInfo(listings) {
+  const prices = listings.map((l) => (l.ebay ? l.ebay.price : Number(l.cross.price) || 0));
+  return { price: Math.max(0, ...prices), platforms: new Set(listings.map((l) => l.platform)).size };
+}
+
+function lstSortEntries(entries) {
+  const mode = document.getElementById("lst-sort").value;
+  const byName = (x, y) => x.name.localeCompare(y.name, undefined, { numeric: true, sensitivity: "base" });
+  const cmp = {
+    "price-desc": (x, y) => y.price - x.price,
+    "price-asc": (x, y) => x.price - y.price,
+    "platforms-desc": (x, y) => y.platforms - x.platforms,
+    "platforms-asc": (x, y) => x.platforms - y.platforms,
+  }[mode];
+  return entries.slice().sort((x, y) => (cmp && cmp(x, y)) || byName(x, y));
+}
+
 // ---------- render ----------
 
 function lstEbayChip(a) {
@@ -499,7 +521,11 @@ function renderListingsOverview() {
 
   const live = groups.filter((g) => lstGroupMatches(g, q));
   const unmatchedShown = unmatched.filter((a) => lstEbayMatches(a, q));
-  const liveHtml = live.map(lstGroupRow).join("") + unmatchedShown.map((a) => lstEbayRow(a, "Match")).join("");
+  const entries = [
+    ...live.map((g) => ({ ...lstSortInfo(g.listings), name: g.name, html: lstGroupRow(g) })),
+    ...unmatchedShown.map((a) => ({ price: a.price || 0, platforms: 1, name: a.title, html: lstEbayRow(a, "Match") })),
+  ];
+  const liveHtml = lstSortEntries(entries).map((e) => e.html).join("");
   document.getElementById("lst-live").innerHTML =
     liveHtml || `<div class="bl-empty">${groups.length || unmatched.length ? "No listings match the search." : "No live listings loaded."}</div>`;
 
@@ -1123,6 +1149,21 @@ function lstOnModalInput(e) {
 // ---------- init ----------
 
 function initListingsOverview() {
+  const sortEl = document.getElementById("lst-sort");
+  try {
+    const saved = localStorage.getItem(LST_SORT_KEY);
+    if (saved && Array.from(sortEl.options).some((o) => o.value === saved)) sortEl.value = saved;
+  } catch (err) {
+    // ignore — falls back to A–Z
+  }
+  sortEl.addEventListener("change", () => {
+    try {
+      localStorage.setItem(LST_SORT_KEY, sortEl.value);
+    } catch (err) {
+      // ignore
+    }
+    renderListingsOverview();
+  });
   const daysEl = document.getElementById("lst-days");
   try {
     const saved = localStorage.getItem(LST_DAYS_KEY);

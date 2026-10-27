@@ -173,6 +173,13 @@
 
       <div class="inv-toolbar">
         <input type="text" id="lst-search" placeholder="Search name / title / item #…" class="toolbar-input" style="flex:1; min-width:200px;" />
+        <select id="lst-sort" class="toolbar-input" title="Sort live listings">
+          <option value="name">Sort: A–Z</option>
+          <option value="price-desc">Sort: Highest $ to Lowest $</option>
+          <option value="price-asc">Sort: Lowest $ to Highest $</option>
+          <option value="platforms-desc">Sort: Listed on most platforms</option>
+          <option value="platforms-asc">Sort: Listed on least platforms</option>
+        </select>
         <select id="lst-days" class="toolbar-input">
           <option value="7">Sold: last 7 days</option>
           <option value="30" selected>Sold: last 30 days</option>

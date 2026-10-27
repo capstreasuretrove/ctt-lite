@@ -14,6 +14,10 @@
 //     confirmed by hand once (Brody's call — no silent auto-linking); the
 //     suggestions just put the likely item first. Same Pop under several
 //     Owners shows as separate choices.
+// Phase 3: the desktop app's FB/Whatnot exports log a batch (ExportBatches)
+// of "exported" rows. "I uploaded this file" (confirmBatch) flips the rows that
+// made it to live and deletes the ones that didn't. Exported cards that weren't
+// filled from the Inventory lookup have no inventoryId — "Match" links them.
 // Signed Pops live on the Autographs tab, whose IDs are separate from
 // Inventory's, so every lookup is keyed by source + id (lstKey).
 // Nothing here changes Inventory Qty — that's the later "Commit" button.
@@ -35,6 +39,7 @@ const LST_STOPWORDS = new Set([
 let lstActive = [];
 let lstSold = [];
 let lstCross = []; // CrossListings rows from the sheet
+let lstBatches = []; // ExportBatches rows
 let lstMatches = new Map(); // eBay ItemID → Matches row
 let lstInv = [];
 let lstInvById = new Map(); // lstKey(source, id) → item
@@ -250,6 +255,7 @@ async function loadListingsOverview() {
       lstApi({ action: "getAll" })
         .then((res) => {
           lstCross = res.crossListings || [];
+          lstBatches = res.batches || [];
           lstMatches = new Map((res.matches || []).filter((m) => m.source === "ebay").map((m) => [m.sourceKey, m]));
           lstSheetReady = true;
         })
@@ -364,6 +370,18 @@ function lstCrossChip(c) {
   return `<span class="lst-chip lst-chip-${escapeHtml(c.platform)}">${escapeHtml(lstPlatformLabel(c.platform))} ${escapeHtml(detail)}<button class="lst-chip-sold" data-act="sold" data-id="${escapeHtml(c.id)}" title="Sold one">Sold</button><button class="lst-chip-btn" data-act="end" data-id="${escapeHtml(c.id)}" title="Taken down (not sold)">✕</button></span>`;
 }
 
+function lstUnlinkedCross(g) {
+  return g.listings.filter((l) => l.cross && !l.cross.inventoryId).map((l) => l.cross);
+}
+
+// Match-dialog entry for exported listings with no Inventory link — one entry
+// per title group, and the match is applied to every unlinked row in it.
+function lstCrossMatchEntry(g) {
+  const rows = lstUnlinkedCross(g);
+  const c = rows[0];
+  return { itemId: "", title: c.title || "(no title)", price: Number(c.price) || 0, qty: rows.reduce((n, r) => n + (parseInt(r.qty, 10) || 1), 0), photo: "", crossRows: rows };
+}
+
 function lstGroupRow(g) {
   const ebay = g.listings.find((l) => l.ebay);
   const photo = ebay && ebay.ebay.photo;
@@ -371,7 +389,9 @@ function lstGroupRow(g) {
   ${photo ? `<img class="lst-thumb" src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="lst-thumb"></div>`}
   <div class="lst-row-main">
     <div class="bl-row-title">${escapeHtml(g.name)}</div>
-    <div class="bl-row-sub">${g.item ? escapeHtml(lstItemSub(g.item)) : "Not found in Inventory"}</div>
+    <div class="bl-row-sub">${g.item ? escapeHtml(lstItemSub(g.item)) : "Not linked to Inventory"}${
+      !g.item && lstUnlinkedCross(g).length ? ` <button class="secondary-btn lst-small" data-act="match-cross" data-key="${escapeHtml(g.key)}"${lstSheetReady ? "" : " disabled"}>Match</button>` : ""
+    }</div>
     <div class="lst-chips">${g.listings.map((l) => (l.ebay ? lstEbayChip(l.ebay) : lstCrossChip(l.cross))).join("")}</div>
   </div>
 </div>`;
@@ -452,12 +472,16 @@ function renderListingsOverview() {
     ? sold.map((e) => lstSoldRow(e, activeIds)).join("")
     : `<div class="bl-empty">${soldAll.length ? "No sales match the search." : "No sales in this period."}</div>`;
 
+  const unlinkedGroups = groups.filter((g) => !g.item && lstUnlinkedCross(g).length);
+  const toMatch = unmatched.length + unlinkedGroups.length;
   const matchBar = document.getElementById("lst-match-bar");
-  matchBar.hidden = !unmatched.length;
-  matchBar.innerHTML = unmatched.length
-    ? `<span><strong>${unmatched.length}</strong> eBay listing${unmatched.length === 1 ? "" : "s"} not matched to Inventory yet.</span>
+  matchBar.hidden = !toMatch;
+  matchBar.innerHTML = toMatch
+    ? `<span><strong>${toMatch}</strong> listing${toMatch === 1 ? "" : "s"} not matched to Inventory yet.</span>
        <button class="primary-btn lst-small" data-act="match-all"${lstSheetReady ? "" : " disabled"}>Match them</button>`
     : "";
+
+  lstRenderBatches();
 
   const live = groups.filter((g) => lstGroupMatches(g, q));
   const unmatchedShown = unmatched.filter((a) => lstEbayMatches(a, q));
@@ -470,6 +494,87 @@ function renderListingsOverview() {
   ignoredWrap.hidden = !ignored.length;
   document.getElementById("lst-ignored-count").textContent = ignored.length;
   document.getElementById("lst-ignored").innerHTML = ignoredShown.map((a) => lstEbayRow(a, "Match")).join("");
+}
+
+// ---------- export batches ----------
+
+function lstBatchRows(batchId) {
+  return lstCross.filter((c) => c.exportBatch === batchId);
+}
+
+function lstRenderBatches() {
+  const open = lstBatches
+    .filter((b) => !b.confirmedLiveAt && lstBatchRows(b.batchId).some((c) => c.status === "exported"))
+    .sort((x, y) => String(y.exportedAt).localeCompare(String(x.exportedAt)));
+  const el = document.getElementById("lst-batches");
+  el.hidden = !open.length;
+  el.innerHTML = open.length
+    ? `<h3 class="lst-heading">Exported — waiting for you to upload</h3>
+<div class="bl-list">${open
+        .map((b) => {
+          const n = lstBatchRows(b.batchId).filter((c) => c.status === "exported").length;
+          return `<div class="bl-row">
+  <div class="bl-row-main">
+    <div class="bl-row-title">${escapeHtml(lstPlatformLabel(b.platform))} · ${n} listing${n === 1 ? "" : "s"}</div>
+    <div class="bl-row-sub">${escapeHtml(b.fileName)} · exported ${lstDate(b.exportedAt)}</div>
+  </div>
+  <div class="bl-row-actions"><button class="primary-btn lst-small" data-act="confirm-batch" data-batch="${escapeHtml(b.batchId)}">I uploaded this file</button></div>
+</div>`;
+        })
+        .join("")}</div>`
+    : "";
+}
+
+function lstOpenBatch(batchId) {
+  const batch = lstBatches.find((b) => b.batchId === batchId);
+  if (!batch) return;
+  const rows = lstBatchRows(batchId)
+    .filter((c) => c.status === "exported")
+    .map((c) => ({ c, checked: true }));
+  lstOpenModal({ kind: "batch", batch, rows });
+}
+
+function lstRenderBatch() {
+  const m = lstModal;
+  const label = escapeHtml(lstPlatformLabel(m.batch.platform));
+  const n = m.rows.filter((r) => r.checked).length;
+  document.getElementById("lst-modal-body").innerHTML = `
+<h3 class="lst-modal-title">I uploaded this file</h3>
+<div class="lst-pick-heading">${escapeHtml(m.batch.fileName)} · exported ${lstDate(m.batch.exportedAt)}. Ticked listings go live on ${label}; untick any that didn't make it — they're removed from the overview.</div>
+<div class="lst-pick-list">
+${m.rows
+  .map((r, idx) => {
+    const item = lstInvFor(r.c);
+    return `<label class="lst-copy-row">
+  <input type="checkbox" class="lst-copy-check" data-idx="${idx}"${r.checked ? " checked" : ""} />
+  <span class="lst-copy-main">
+    <span class="lst-pick-name">${escapeHtml(item ? lstItemName(item) : r.c.title || "(no title)")}</span>
+    <span class="lst-pick-sub">${r.c.price ? lstMoney(r.c.price) : "no price"}${(parseInt(r.c.qty, 10) || 1) > 1 ? " · Qty " + r.c.qty : ""}${item ? "" : " · not linked to Inventory"}</span>
+  </span>
+</label>`;
+  })
+  .join("")}
+</div>
+<div class="lst-modal-actions">
+  <button class="primary-btn" data-act="batch-save">Confirm ${n} live${m.rows.length - n ? `, remove ${m.rows.length - n}` : ""}</button>
+</div>`;
+}
+
+async function lstSaveBatch() {
+  const m = lstModal;
+  const liveIds = m.rows.filter((r) => r.checked).map((r) => r.c.id);
+  const droppedIds = m.rows.filter((r) => !r.checked).map((r) => r.c.id);
+  const res = await lstApi({ action: "confirmBatch", batchId: m.batch.batchId, liveIds, droppedIds });
+  m.batch.confirmedLiveAt = res.confirmedLiveAt || new Date().toISOString();
+  const live = new Set(liveIds);
+  const dropped = new Set(droppedIds);
+  lstCross.forEach((c) => {
+    if (live.has(c.id)) c.status = "live";
+  });
+  lstCross = lstCross.filter((c) => !dropped.has(c.id));
+  const label = lstPlatformLabel(m.batch.platform);
+  lstCloseModal();
+  lstToast(`${liveIds.length} listing${liveIds.length === 1 ? "" : "s"} now live on ${label}.`);
 }
 
 // ---------- actions ----------
@@ -576,7 +681,13 @@ function lstOnListClick(e) {
     const a = lstActive.find((x) => x.itemId === btn.dataset.item);
     if (a) lstOpenMatch([a]);
   } else if (act === "match-all") {
-    lstOpenMatch(lstBuildGroups().unmatched);
+    const { groups, unmatched } = lstBuildGroups();
+    lstOpenMatch([...unmatched, ...groups.filter((g) => !g.item && lstUnlinkedCross(g).length).map(lstCrossMatchEntry)]);
+  } else if (act === "match-cross") {
+    const g = lstBuildGroups().groups.find((x) => x.key === btn.dataset.key);
+    if (g && lstUnlinkedCross(g).length) lstOpenMatch([lstCrossMatchEntry(g)]);
+  } else if (act === "confirm-batch") {
+    lstOpenBatch(btn.dataset.batch);
   }
 }
 
@@ -660,6 +771,7 @@ function lstRenderModal() {
   if (!lstModal) return;
   if (lstModal.kind === "match") lstRenderMatch();
   else if (lstModal.kind === "copy") lstRenderCopy();
+  else if (lstModal.kind === "batch") lstRenderBatch();
   else lstRenderAdd();
 }
 
@@ -672,7 +784,7 @@ function lstOpenMatch(queue) {
 function lstRenderMatch() {
   const { queue, index } = lstModal;
   const a = queue[index];
-  const current = lstMatches.get(a.itemId);
+  const current = a.crossRows ? null : lstMatches.get(a.itemId);
   const currentText = !current
     ? ""
     : current.inventoryId === "ignore"
@@ -684,13 +796,13 @@ function lstRenderMatch() {
   ${a.photo ? `<img class="lst-thumb" src="${escapeHtml(a.photo)}" alt="" />` : `<div class="lst-thumb"></div>`}
   <div>
     <div class="bl-row-title">${lstItemLink(a.itemId, escapeHtml(a.title))}</div>
-    <div class="bl-row-sub">${lstMoney(a.price)} · Qty ${a.qty}${currentText ? " · " + escapeHtml(currentText) : ""}</div>
+    <div class="bl-row-sub">${a.crossRows ? escapeHtml(lstPlatformLabel(a.crossRows[0].platform)) + " · " : ""}${lstMoney(a.price)} · Qty ${a.qty}${currentText ? " · " + escapeHtml(currentText) : ""}</div>
   </div>
 </div>
 <input type="text" id="lst-match-search" class="toolbar-input lst-modal-search" placeholder="Search Inventory (name, #, line, owner)…" value="${escapeHtml(lstModal.search)}" />
 <div id="lst-match-results" class="lst-pick-list"></div>
 <div class="lst-modal-actions">
-  <button class="secondary-btn" data-act="ignore">Not an inventory item</button>
+  ${a.crossRows ? "" : `<button class="secondary-btn" data-act="ignore">Not an inventory item</button>`}
   ${queue.length > 1 ? `<button class="secondary-btn" data-act="skip">Skip for now</button>` : ""}
 </div>`;
   const input = document.getElementById("lst-match-search");
@@ -715,6 +827,14 @@ async function lstSaveMatch(key) {
   const a = lstModal.queue[lstModal.index];
   const item = key === "ignore" ? null : lstInvById.get(key);
   if (key !== "ignore" && !item) return;
+  if (a.crossRows) {
+    if (!item) return;
+    const fields = { inventoryId: String(item.id), inventorySource: item.source };
+    await lstApi({ action: "updateCrossListings", rows: a.crossRows.map((c) => ({ id: c.id, fields })) });
+    a.crossRows.forEach((c) => Object.assign(c, fields));
+    lstNextMatch();
+    return;
+  }
   const match = {
     source: "ebay",
     sourceKey: a.itemId,
@@ -931,6 +1051,10 @@ function lstOnModalClick(e) {
     else if (act === "skip") lstNextMatch();
     return;
   }
+  if (lstModal.kind === "batch") {
+    if (act === "batch-save") lstRun(lstSaveBatch);
+    return;
+  }
   if (lstModal.kind === "copy") {
     const m = lstModal;
     if (act === "copy-all" || act === "copy-none") {
@@ -964,12 +1088,12 @@ function lstOnModalClick(e) {
 
 function lstOnModalInput(e) {
   const el = e.target;
-  if (lstModal && lstModal.kind === "copy" && el.classList.contains("lst-copy-check")) {
+  if (lstModal && (lstModal.kind === "copy" || lstModal.kind === "batch") && el.classList.contains("lst-copy-check")) {
     const r = lstModal.rows[Number(el.dataset.idx)];
     if (r && r.checked !== el.checked) {
       r.checked = el.checked;
       const scroll = el.closest(".lst-pick-list").scrollTop;
-      lstRenderCopy();
+      lstRenderModal();
       document.querySelector("#lst-modal-body .lst-pick-list").scrollTop = scroll;
     }
     return;
@@ -1000,7 +1124,7 @@ function initListingsOverview() {
   document.getElementById("lst-search").addEventListener("input", renderListingsOverview);
   document.getElementById("lst-refresh").addEventListener("click", loadListingsOverview);
   document.getElementById("lst-add").addEventListener("click", lstOpenAdd);
-  for (const id of ["lst-sold", "lst-live", "lst-ignored", "lst-match-bar"]) {
+  for (const id of ["lst-sold", "lst-live", "lst-ignored", "lst-match-bar", "lst-batches"]) {
     document.getElementById(id).addEventListener("click", lstOnListClick);
   }
   const overlay = document.getElementById("lst-overlay");

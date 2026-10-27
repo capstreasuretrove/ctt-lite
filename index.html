@@ -183,8 +183,10 @@
         <button id="lst-refresh" class="secondary-btn">↻ Refresh</button>
       </div>
 
-      <h3 class="lst-heading">Recently sold</h3>
-      <div id="lst-sold" class="bl-list"></div>
+      <details class="lst-sold-wrap">
+        <summary class="lst-heading">Recently sold (<span id="lst-sold-count">0</span>)</summary>
+        <div id="lst-sold" class="bl-list"></div>
+      </details>
 
       <div id="lst-batches" hidden></div>
 

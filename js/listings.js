@@ -481,6 +481,7 @@ function renderListingsOverview() {
   document.getElementById("lst-add").disabled = !lstSheetReady;
 
   const sold = soldAll.filter((e) => lstSoldMatches(e, q));
+  document.getElementById("lst-sold-count").textContent = q ? `${sold.length} of ${soldAll.length}` : soldAll.length;
   document.getElementById("lst-sold").innerHTML = sold.length
     ? sold.map((e) => lstSoldRow(e, activeIds)).join("")
     : `<div class="bl-empty">${soldAll.length ? "No sales match the search." : "No sales in this period."}</div>`;

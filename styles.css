@@ -741,3 +741,4 @@ main { padding: 1.25rem; }
 .lst-copy-row:hover { border-color: var(--navy); }
 .lst-copy-row input { width: 1.1rem; height: 1.1rem; flex: none; }
 .lst-copy-main { display: flex; flex-direction: column; min-width: 0; }
+.lst-saved-note { background: #d9f2e3; color: #1a7a44; border-radius: 6px; padding: 0.45rem 0.7rem; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.6rem; }

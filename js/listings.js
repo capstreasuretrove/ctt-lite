@@ -43,6 +43,7 @@ let lstLoading = false;
 let lstBusy = false;
 let lstModal = null; // { kind: "match" | "add", ... } while the overlay is open
 let lstToastTimer = null;
+let lstLastPlatform = "whatnot"; // Add dialog reopens on the platform used last
 
 function lstBanner(message, kind) {
   const el = document.getElementById("lst-banner");
@@ -738,7 +739,7 @@ function lstNextMatch() {
 
 // Add: search Inventory, tap items into a list, one Save.
 function lstOpenAdd() {
-  lstOpenModal({ kind: "add", platform: "whatnot", search: "", pending: [] });
+  lstOpenModal({ kind: "add", platform: lstLastPlatform, search: "", pending: [] });
 }
 
 function lstRenderAdd() {
@@ -749,13 +750,20 @@ function lstRenderAdd() {
   ${LST_MANUAL_PLATFORMS.map((p) => `<button class="lst-seg-btn${p.key === m.platform ? " active" : ""}" data-act="platform" data-p="${p.key}">${p.label}</button>`).join("")}
 </div>
 <div class="lst-copy-hint">Bulk-imported your eBay listings? <button class="secondary-btn lst-small" data-act="copy-ebay">Copy eBay listings to ${escapeHtml(lstPlatformLabel(m.platform))}…</button></div>
-<input type="text" id="lst-add-search" class="toolbar-input lst-modal-search" placeholder="Search Inventory to add (name, #, line, owner)…" value="${escapeHtml(m.search)}" />
+${m.savedNote ? `<div class="lst-saved-note">${escapeHtml(m.savedNote)}</div>` : ""}
+<input type="text" id="lst-add-search" class="toolbar-input lst-modal-search" placeholder="Search Inventory to add (name, #, line, owner) — Enter adds the top result" value="${escapeHtml(m.search)}" />
 <div id="lst-add-results" class="lst-pick-list"></div>
 <div id="lst-add-pending"></div>`;
   const input = document.getElementById("lst-add-search");
   input.addEventListener("input", () => {
     m.search = input.value;
     lstRenderAddResults();
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const top = lstSearchInventory(m.search.trim())[0];
+    if (top) lstPend(top);
   });
   lstRenderAddResults();
   lstRenderAddPending();
@@ -818,10 +826,25 @@ async function lstSaveAdd() {
   }));
   const res = await lstApi({ action: "addCrossListings", rows });
   lstCross.push(...(res.rows || []));
-  const label = lstPlatformLabel(m.platform);
+  // Stays open so the next batch can go straight in.
   m.pending = [];
-  lstCloseModal();
-  lstToast(`Added ${rows.length} listing${rows.length === 1 ? "" : "s"} on ${label}.`);
+  m.search = "";
+  m.savedNote = `Saved ${rows.length} to ${lstPlatformLabel(m.platform)} ✓ — keep adding, or close when done.`;
+  lstRenderAdd();
+}
+
+// Tapping (or Enter on) a search result: into the list, search cleared and
+// focused again for the next one.
+function lstPend(item) {
+  const m = lstModal;
+  if (item && !m.pending.some((p) => p.item.key === item.key)) m.pending.push({ item, price: "", qty: "1" });
+  m.search = "";
+  m.savedNote = "";
+  const input = document.getElementById("lst-add-search");
+  input.value = "";
+  lstRenderAddResults();
+  lstRenderAddPending();
+  input.focus();
 }
 
 // Copy: every live eBay listing becomes a listing on another platform with the
@@ -925,13 +948,11 @@ function lstOnModalClick(e) {
     if (m.pending.length && !confirm("Discard the listings you haven't saved?")) return;
     lstOpenCopy(m.platform);
   } else if (act === "platform") {
-    m.platform = btn.dataset.p;
+    m.platform = lstLastPlatform = btn.dataset.p;
+    m.savedNote = "";
     lstRenderAdd();
   } else if (act === "pick") {
-    const item = lstInvById.get(btn.dataset.inv);
-    if (item && !m.pending.some((p) => p.item.key === item.key)) m.pending.push({ item, price: "", qty: "1" });
-    lstRenderAddResults();
-    lstRenderAddPending();
+    lstPend(lstInvById.get(btn.dataset.inv));
   } else if (act === "unpend") {
     m.pending.splice(Number(btn.dataset.idx), 1);
     lstRenderAddResults();

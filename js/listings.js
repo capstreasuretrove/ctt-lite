@@ -328,16 +328,23 @@ function lstBuildGroups() {
     else add(lstKey(m.inventorySource, m.inventoryId), { platform: "ebay", ebay: a });
   }
   for (const c of lstCross) {
-    if (lstIsLive(c)) add(c.inventoryId ? lstKey(c.inventorySource, c.inventoryId) : `title:${c.title}`, { platform: c.platform, cross: c });
+    if (!lstIsLive(c)) continue;
+    const key =
+      c.inventoryId === "ignore" ? `ignore:${c.title}` : c.inventoryId ? lstKey(c.inventorySource, c.inventoryId) : `title:${c.title}`;
+    add(key, { platform: c.platform, cross: c });
   }
-  const list = Array.from(groups.values());
-  for (const g of list) {
+  const all = Array.from(groups.values());
+  // Sheet listings marked "not an inventory item" (bundles etc.) are shown
+  // with the ignored eBay listings, not in the live list.
+  const ignoredGroups = all.filter((g) => g.key.startsWith("ignore:"));
+  const list = all.filter((g) => !g.key.startsWith("ignore:"));
+  for (const g of all) {
     g.listings.sort((x, y) => lstTier(x.platform) - lstTier(y.platform));
     const first = g.listings[0];
     g.name = g.item ? lstItemName(g.item) : (first.ebay || first.cross).title || "(no title)";
   }
   list.sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true, sensitivity: "base" }));
-  return { groups: list, unmatched, ignored };
+  return { groups: list, unmatched, ignored, ignoredGroups };
 }
 
 function lstGroupMatches(g, q) {
@@ -374,10 +381,16 @@ function lstUnlinkedCross(g) {
   return g.listings.filter((l) => l.cross && !l.cross.inventoryId).map((l) => l.cross);
 }
 
+// Sheet rows whose link can be (re)set from the Match dialog: unlinked or
+// marked not-an-inventory-item.
+function lstRelinkableCross(g) {
+  return g.listings.filter((l) => l.cross && (!l.cross.inventoryId || l.cross.inventoryId === "ignore")).map((l) => l.cross);
+}
+
 // Match-dialog entry for exported listings with no Inventory link — one entry
 // per title group, and the match is applied to every unlinked row in it.
 function lstCrossMatchEntry(g) {
-  const rows = lstUnlinkedCross(g);
+  const rows = lstRelinkableCross(g);
   const c = rows[0];
   return { itemId: "", title: c.title || "(no title)", price: Number(c.price) || 0, qty: rows.reduce((n, r) => n + (parseInt(r.qty, 10) || 1), 0), photo: "", crossRows: rows };
 }
@@ -389,8 +402,8 @@ function lstGroupRow(g) {
   ${photo ? `<img class="lst-thumb" src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="lst-thumb"></div>`}
   <div class="lst-row-main">
     <div class="bl-row-title">${escapeHtml(g.name)}</div>
-    <div class="bl-row-sub">${g.item ? escapeHtml(lstItemSub(g.item)) : "Not linked to Inventory"}${
-      !g.item && lstUnlinkedCross(g).length ? ` <button class="secondary-btn lst-small" data-act="match-cross" data-key="${escapeHtml(g.key)}"${lstSheetReady ? "" : " disabled"}>Match</button>` : ""
+    <div class="bl-row-sub">${g.item ? escapeHtml(lstItemSub(g.item)) : g.key.startsWith("ignore:") ? "Not an inventory item" : "Not linked to Inventory"}${
+      !g.item && lstRelinkableCross(g).length ? ` <button class="secondary-btn lst-small" data-act="match-cross" data-key="${escapeHtml(g.key)}"${lstSheetReady ? "" : " disabled"}>Match</button>` : ""
     }</div>
     <div class="lst-chips">${g.listings.map((l) => (l.ebay ? lstEbayChip(l.ebay) : lstCrossChip(l.cross))).join("")}</div>
   </div>
@@ -455,7 +468,7 @@ function lstSoldMatches(e, q) {
 
 function renderListingsOverview() {
   const q = document.getElementById("lst-search").value.trim().toLowerCase();
-  const { groups, unmatched, ignored } = lstBuildGroups();
+  const { groups, unmatched, ignored, ignoredGroups } = lstBuildGroups();
   const activeIds = new Set(lstActive.map((a) => a.itemId));
   const soldAll = lstSoldEntries();
 
@@ -490,10 +503,13 @@ function renderListingsOverview() {
     liveHtml || `<div class="bl-empty">${groups.length || unmatched.length ? "No listings match the search." : "No live listings loaded."}</div>`;
 
   const ignoredShown = ignored.filter((a) => lstEbayMatches(a, q));
+  const ignoredGroupsShown = ignoredGroups.filter((g) => lstGroupMatches(g, q));
+  const ignoredCount = ignored.length + ignoredGroups.length;
   const ignoredWrap = document.getElementById("lst-ignored-wrap");
-  ignoredWrap.hidden = !ignored.length;
-  document.getElementById("lst-ignored-count").textContent = ignored.length;
-  document.getElementById("lst-ignored").innerHTML = ignoredShown.map((a) => lstEbayRow(a, "Match")).join("");
+  ignoredWrap.hidden = !ignoredCount;
+  document.getElementById("lst-ignored-count").textContent = ignoredCount;
+  document.getElementById("lst-ignored").innerHTML =
+    ignoredShown.map((a) => lstEbayRow(a, "Match")).join("") + ignoredGroupsShown.map(lstGroupRow).join("");
 }
 
 // ---------- export batches ----------
@@ -684,8 +700,9 @@ function lstOnListClick(e) {
     const { groups, unmatched } = lstBuildGroups();
     lstOpenMatch([...unmatched, ...groups.filter((g) => !g.item && lstUnlinkedCross(g).length).map(lstCrossMatchEntry)]);
   } else if (act === "match-cross") {
-    const g = lstBuildGroups().groups.find((x) => x.key === btn.dataset.key);
-    if (g && lstUnlinkedCross(g).length) lstOpenMatch([lstCrossMatchEntry(g)]);
+    const { groups, ignoredGroups } = lstBuildGroups();
+    const g = [...groups, ...ignoredGroups].find((x) => x.key === btn.dataset.key);
+    if (g && lstRelinkableCross(g).length) lstOpenMatch([lstCrossMatchEntry(g)]);
   } else if (act === "confirm-batch") {
     lstOpenBatch(btn.dataset.batch);
   }
@@ -802,7 +819,7 @@ function lstRenderMatch() {
 <input type="text" id="lst-match-search" class="toolbar-input lst-modal-search" placeholder="Search Inventory (name, #, line, owner)…" value="${escapeHtml(lstModal.search)}" />
 <div id="lst-match-results" class="lst-pick-list"></div>
 <div class="lst-modal-actions">
-  ${a.crossRows ? "" : `<button class="secondary-btn" data-act="ignore">Not an inventory item</button>`}
+  <button class="secondary-btn" data-act="ignore">Not an inventory item</button>
   ${queue.length > 1 ? `<button class="secondary-btn" data-act="skip">Skip for now</button>` : ""}
 </div>`;
   const input = document.getElementById("lst-match-search");
@@ -828,8 +845,7 @@ async function lstSaveMatch(key) {
   const item = key === "ignore" ? null : lstInvById.get(key);
   if (key !== "ignore" && !item) return;
   if (a.crossRows) {
-    if (!item) return;
-    const fields = { inventoryId: String(item.id), inventorySource: item.source };
+    const fields = item ? { inventoryId: String(item.id), inventorySource: item.source } : { inventoryId: "ignore", inventorySource: "" };
     await lstApi({ action: "updateCrossListings", rows: a.crossRows.map((c) => ({ id: c.id, fields })) });
     a.crossRows.forEach((c) => Object.assign(c, fields));
     lstNextMatch();

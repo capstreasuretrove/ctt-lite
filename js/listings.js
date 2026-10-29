@@ -262,6 +262,50 @@ function lstInvFor(row) {
   return lstInvById.get(lstKey(row.inventorySource, row.inventoryId)) || null;
 }
 
+// Bundles: one listing that's several Inventory items sold together. Stored
+// as inventorySource "bundle" + inventoryId = the items' keys joined by ","
+// (an item listed twice = 2 of it), so its key is "bundle:<keys>".
+function lstIsBundleKey(key) {
+  return String(key || "").startsWith("bundle:");
+}
+
+function lstBundleKey(itemKeys) {
+  return lstKey("bundle", itemKeys.join(","));
+}
+
+// [{ key, count }] — what one unit of a link uses up. A plain item is itself ×1.
+function lstParts(key) {
+  if (!lstIsBundleKey(key)) return [{ key, count: 1 }];
+  const counts = new Map();
+  for (const k of key.slice("bundle:".length).split(",").filter(Boolean)) counts.set(k, (counts.get(k) || 0) + 1);
+  return Array.from(counts, ([k, count]) => ({ key: k, count }));
+}
+
+// Display name for an item or bundle key ("" when the item is gone).
+function lstKeyName(key) {
+  if (lstIsBundleKey(key)) {
+    return (
+      "Bundle: " +
+      lstParts(key)
+        .map((p) => {
+          const item = lstInvById.get(p.key);
+          return `${p.count > 1 ? p.count + "× " : ""}${item ? lstItemName(item) : "(missing item)"}`;
+        })
+        .join(" + ")
+    );
+  }
+  const item = lstInvById.get(key);
+  return item ? lstItemName(item) : "";
+}
+
+// Sheet / Matches fields for a link: an item key, a bundle key, or "ignore".
+function lstLinkFields(key) {
+  if (key === "ignore") return { inventoryId: "ignore", inventorySource: "" };
+  if (lstIsBundleKey(key)) return { inventoryId: key.slice("bundle:".length), inventorySource: "bundle" };
+  const item = lstInvById.get(key);
+  return { inventoryId: String(item.id), inventorySource: item.source };
+}
+
 function lstDays() {
   return parseInt(document.getElementById("lst-days").value, 10) || 30;
 }
@@ -466,11 +510,13 @@ function lstCommitCandidates() {
 function lstPendingQty() {
   const pending = new Map();
   const add = (key, n) => pending.set(key, (pending.get(key) || 0) + n);
-  for (const e of lstCommitCandidates()) if (e.item && e.item !== "ignore") add(e.item, e.qty);
+  for (const e of lstCommitCandidates()) {
+    if (e.item && e.item !== "ignore") for (const p of lstParts(e.item)) add(p.key, e.qty * p.count);
+  }
   for (const s of lstShowSales) {
     if (s.stockOut !== false) continue;
     const key = lstShowItemKey(s);
-    if (key && key !== "ignore") add(key, 1);
+    if (key && key !== "ignore") for (const p of lstParts(key)) add(p.key, p.count);
   }
   return pending;
 }
@@ -630,7 +676,7 @@ function lstBuildGroups() {
   for (const g of all) {
     g.listings.sort((x, y) => lstTier(x.platform) - lstTier(y.platform));
     const first = g.listings[0];
-    g.name = g.item ? lstItemName(g.item) : (first.ebay || first.cross).title || "(no title)";
+    g.name = g.item ? lstItemName(g.item) : lstIsBundleKey(g.key) ? lstKeyName(g.key) : (first.ebay || first.cross).title || "(no title)";
   }
   list.sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true, sensitivity: "base" }));
   return { groups: list, unmatched, ignored, ignoredGroups };
@@ -640,6 +686,7 @@ function lstGroupMatches(g, q) {
   if (!q) return true;
   const parts = [g.name];
   if (g.item) parts.push(g.item.line, g.item.license, g.item.owner, g.item.signedBy);
+  if (lstIsBundleKey(g.key)) parts.push("bundle");
   for (const l of g.listings) {
     if (l.ebay) parts.push(l.ebay.title, l.ebay.itemId);
     if (l.cross) parts.push(l.cross.title, lstPlatformLabel(l.cross.platform));
@@ -691,10 +738,20 @@ function lstUnlinkedCross(g) {
   return g.listings.filter((l) => l.cross && !l.cross.inventoryId).map((l) => l.cross);
 }
 
-// Sheet rows whose link can be (re)set from the Match dialog: unlinked or
-// marked not-an-inventory-item.
+// Sheet rows whose link can be (re)set from the Match dialog: unlinked,
+// marked not-an-inventory-item, or a bundle.
 function lstRelinkableCross(g) {
-  return g.listings.filter((l) => l.cross && (!l.cross.inventoryId || l.cross.inventoryId === "ignore")).map((l) => l.cross);
+  return g.listings
+    .filter((l) => l.cross && (!l.cross.inventoryId || l.cross.inventoryId === "ignore" || l.cross.inventorySource === "bundle"))
+    .map((l) => l.cross);
+}
+
+// "Bundle of 3 items · stock for 2" — how many whole bundles Inventory covers.
+function lstBundleSub(key) {
+  const parts = lstParts(key);
+  const stock = Math.min(...parts.map((p) => Math.floor((parseInt((lstInvById.get(p.key) || {}).qty, 10) || 0) / p.count)));
+  const n = parts.reduce((sum, p) => sum + p.count, 0);
+  return `Bundle of ${n} Inventory items · stock for ${stock}`;
 }
 
 // Match-dialog entry for exported listings with no Inventory link — one entry
@@ -712,8 +769,12 @@ function lstGroupRow(g) {
   ${photo ? `<img class="lst-thumb" src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="lst-thumb"></div>`}
   <div class="lst-row-main">
     <div class="bl-row-title">${escapeHtml(g.name)}</div>
-    <div class="bl-row-sub">${g.item ? escapeHtml(lstItemSub(g.item)) : g.key.startsWith("ignore:") ? "Not an inventory item" : "Not linked to Inventory"}${
-      !g.item && lstRelinkableCross(g).length ? ` <button class="secondary-btn lst-small" data-act="match-cross" data-key="${escapeHtml(g.key)}"${lstSheetReady ? "" : " disabled"}>Match</button>` : ""
+    <div class="bl-row-sub">${
+      g.item ? escapeHtml(lstItemSub(g.item)) : lstIsBundleKey(g.key) ? escapeHtml(lstBundleSub(g.key)) : g.key.startsWith("ignore:") ? "Not an inventory item" : "Not linked to Inventory"
+    }${
+      !g.item && lstRelinkableCross(g).length
+        ? ` <button class="secondary-btn lst-small" data-act="match-cross" data-key="${escapeHtml(g.key)}"${lstSheetReady ? "" : " disabled"}>${lstIsBundleKey(g.key) ? "Edit bundle" : "Match"}</button>`
+        : ""
     }</div>
     <div class="lst-chips">${g.listings.map((l) => (l.ebay ? lstEbayChip(l.ebay) : lstCrossChip(l.cross))).join("")}</div>
   </div>
@@ -780,7 +841,7 @@ function lstSoldRow(e, activeIds) {
   const item = lstInvFor(c);
   return `<div class="bl-row">
   <div class="bl-row-main">
-    <div class="bl-row-title">${escapeHtml(item ? lstItemName(item) : c.title || "(no title)")}</div>
+    <div class="bl-row-title">${escapeHtml((e.item && e.item !== "ignore" && lstKeyName(e.item)) || c.title || "(no title)")}</div>
     <div class="bl-row-sub">${lstDate(c.soldDate)} · ${parseInt(c.qty, 10) || 1} × ${c.price ? lstMoney(c.price) : "no price"}${item && item.owner ? " · Owner " + escapeHtml(item.owner) : ""}</div>
   </div>
   <div class="bl-row-actions"><span class="bl-badge lst-badge-${escapeHtml(c.platform)}">${escapeHtml(lstPlatformLabel(c.platform))}</span>${lstCommittedBadge(e)}${
@@ -804,22 +865,43 @@ function lstListingQty(l) {
 }
 
 // Items that sold in the window (or have sales Inventory doesn't reflect yet)
-// and are still listed somewhere for more than the stock left.
+// and are still listed somewhere for more than the stock left. A bundle sale
+// counts as a sale of each item in it; a bundle listing is flagged when an
+// item in it sold and there's no longer stock for that many whole bundles.
 function lstPullList(groups) {
   const cutoff = lstCutoffDay();
   const recent = new Map();
   for (const e of lstAllSales()) {
     if (e.cancelled || !e.item || e.item === "ignore" || e.day < cutoff) continue;
-    if (!recent.has(e.item)) recent.set(e.item, []);
-    recent.get(e.item).push(e);
+    for (const p of lstParts(e.item)) {
+      if (!recent.has(p.key)) recent.set(p.key, []);
+      recent.get(p.key).push(e);
+    }
   }
   const pending = lstPendingQty();
+  const leftOf = (key) => {
+    const item = lstInvById.get(key);
+    return item ? Math.max(0, (parseInt(item.qty, 10) || 0) - (pending.get(key) || 0)) : null;
+  };
+  const touched = (key) => recent.has(key) || pending.has(key);
   const out = [];
   for (const g of groups) {
-    if (!g.item || (!recent.has(g.key) && !pending.has(g.key))) continue;
-    const left = Math.max(0, (parseInt(g.item.qty, 10) || 0) - (pending.get(g.key) || 0));
+    let left;
+    let sold;
+    if (g.item) {
+      if (!touched(g.key)) continue;
+      left = leftOf(g.key);
+      sold = recent.get(g.key) || [];
+    } else if (lstIsBundleKey(g.key)) {
+      const parts = lstParts(g.key);
+      if (!parts.some((p) => touched(p.key)) || parts.some((p) => leftOf(p.key) === null)) continue;
+      left = Math.min(...parts.map((p) => Math.floor(leftOf(p.key) / p.count)));
+      sold = Array.from(new Set(parts.flatMap((p) => recent.get(p.key) || [])));
+    } else {
+      continue;
+    }
     const flagged = g.listings.filter((l) => lstListingQty(l) > left);
-    if (flagged.length) out.push({ g, sold: recent.get(g.key) || [], left, flagged });
+    if (flagged.length) out.push({ g, sold, left, flagged });
   }
   return out;
 }
@@ -850,7 +932,7 @@ function lstRenderPull(groups) {
           return `<div class="bl-row lst-row">
   <div class="lst-row-main">
     <div class="bl-row-title">${escapeHtml(p.g.name)}</div>
-    <div class="bl-row-sub">${sold ? "Sold: " + escapeHtml(sold) + " · " : ""}${p.left} left${p.g.item.owner ? " · Owner " + escapeHtml(p.g.item.owner) : ""}</div>
+    <div class="bl-row-sub">${sold ? "Sold: " + escapeHtml(sold) + " · " : ""}${p.left} left${p.g.item ? (p.g.item.owner ? " · Owner " + escapeHtml(p.g.item.owner) : "") : " (whole bundles)"}</div>
     <div class="lst-chips">${p.flagged.map((l) => lstPullChip(l, p.left)).join("")}</div>
   </div>
 </div>`;
@@ -1092,10 +1174,9 @@ async function lstSaveBatch() {
 
 // ---------- commit sales to inventory ----------
 
-function lstSaleName(e) {
-  const item = e.item && e.item !== "ignore" ? lstInvById.get(e.item) : null;
-  if (item) return lstItemName(item);
-  return e.ebay ? e.ebay.title : e.cross.title || "(no title)";
+// Every item a sale's link points at still exists in Inventory.
+function lstLinkResolved(key) {
+  return Boolean(key && key !== "ignore" && lstParts(key).every((p) => lstInvById.has(p.key)));
 }
 
 // Match-dialog entry for a sale with no (or a missing) Inventory item.
@@ -1109,7 +1190,7 @@ function lstOpenCommit() {
   const rows = lstCommitCandidates()
     .sort((x, y) => String(x.day).localeCompare(String(y.day)))
     .map((e) => {
-      const ready = Boolean(e.item && e.item !== "ignore" && lstInvById.get(e.item));
+      const ready = lstLinkResolved(e.item);
       return { e, ready, checked: ready };
     });
   if (rows.length) lstOpenModal({ kind: "commit", rows });
@@ -1125,16 +1206,23 @@ function lstRenderCommit() {
   const readyHtml = m.rows
     .map((r, idx) => {
       if (!r.ready) return "";
-      const item = lstInvById.get(r.e.item);
-      const before = running.has(item.key) ? running.get(item.key) : parseInt(item.qty, 10) || 0;
-      const after = r.checked ? Math.max(0, before - r.e.qty) : before;
-      running.set(item.key, after);
-      const who = item.source === "autograph" ? "Autographs" : `Owner ${item.owner}`;
+      // One line per item — a bundle lists each item in it.
+      const lines = lstParts(r.e.item).map((p) => {
+        const item = lstInvById.get(p.key);
+        const sold = r.e.qty * p.count;
+        const before = running.has(item.key) ? running.get(item.key) : parseInt(item.qty, 10) || 0;
+        const after = r.checked ? Math.max(0, before - sold) : before;
+        running.set(item.key, after);
+        const who = item.source === "autograph" ? "Autographs" : `Owner ${item.owner}`;
+        const name = lstIsBundleKey(r.e.item) ? `${lstItemName(item)}${p.count > 1 ? " ×" + p.count : ""} · ` : "";
+        return `${escapeHtml(name + who)} · <strong>Qty ${before} → ${after}</strong>${sold > before && r.checked ? " (had less than sold)" : ""}`;
+      });
       return `<label class="lst-copy-row">
   <input type="checkbox" class="lst-copy-check" data-idx="${idx}"${r.checked ? " checked" : ""} />
   <span class="lst-copy-main">
-    <span class="lst-pick-name">${escapeHtml(lstItemName(item))}</span>
-    <span class="lst-pick-sub">${escapeHtml(lstPlatformLabel(r.e.platform))} · ${lstDate(r.e.day)} · sold ${r.e.qty} · ${escapeHtml(who)} · <strong>Qty ${before} → ${after}</strong>${r.e.qty > before && r.checked ? " (had less than sold)" : ""}</span>
+    <span class="lst-pick-name">${escapeHtml(lstKeyName(r.e.item))}</span>
+    <span class="lst-pick-sub">${escapeHtml(lstPlatformLabel(r.e.platform))} · ${lstDate(r.e.day)} · sold ${r.e.qty}${lines.length > 1 ? "" : " · " + lines[0]}</span>
+    ${lines.length > 1 ? lines.map((l) => `<span class="lst-pick-sub">${l}</span>`).join("") : ""}
   </span>
 </label>`;
     })
@@ -1170,23 +1258,16 @@ async function lstSaveCommit() {
   });
   // Only keys the sheet hadn't seen are subtracted — the double-count guard.
   const added = new Set(res.added || []);
-  const perItem = new Map();
-  for (const e of picked) {
-    if (!added.has(e.key)) continue;
-    if (!perItem.has(e.item)) perItem.set(e.item, []);
-    perItem.get(e.item).push(e);
-  }
+  const sales = picked.filter((e) => added.has(e.key));
+  const soldPer = new Map(); // item key → units to subtract (bundles count each item)
+  for (const e of sales) for (const p of lstParts(e.item)) soldPer.set(p.key, (soldPer.get(p.key) || 0) + e.qty * p.count);
 
-  const undo = []; // sale keys to un-record: item gone, or its Qty write failed
+  const failed = new Set(); // item keys whose Qty wasn't written (gone, or the write failed)
   const updates = { inventory: [], autograph: [] };
-  for (const [key, sales] of perItem) {
+  for (const [key, sold] of soldPer) {
     const item = lstInvById.get(key);
-    if (!item) {
-      undo.push(...sales.map((e) => e.key));
-      continue;
-    }
-    const sold = sales.reduce((n, e) => n + e.qty, 0);
-    updates[item.source].push({ item, sales, qty: Math.max(0, (parseInt(item.qty, 10) || 0) - sold) });
+    if (!item) failed.add(key);
+    else updates[item.source].push({ item, qty: Math.max(0, (parseInt(item.qty, 10) || 0) - sold) });
   }
   const errors = [];
   const done = [];
@@ -1198,8 +1279,19 @@ async function lstSaveCommit() {
       done.push(...list);
     } catch (err) {
       errors.push(err.message);
-      for (const u of list) undo.push(...u.sales.map((e) => e.key));
+      for (const u of list) failed.add(u.item.key);
     }
+  }
+  // A sale none of whose items got written is un-recorded so it can be retried.
+  // One that was partly written (a bundle across Pops + Autographs) stays
+  // recorded — retrying it would subtract the written items twice.
+  const undo = [];
+  const partial = [];
+  for (const e of sales) {
+    const parts = lstParts(e.item);
+    const bad = parts.filter((p) => failed.has(p.key)).length;
+    if (bad === parts.length) undo.push(e.key);
+    else if (bad) partial.push(e);
   }
   let undoFailed = false;
   if (undo.length) {
@@ -1217,12 +1309,13 @@ async function lstSaveCommit() {
   }
   const skipped = picked.length + ignored.length - added.size;
   lstCloseModal();
-  if (errors.length) {
+  if (errors.length || partial.length) {
     const msg =
-      `Inventory Qty didn't save (${errors.join(" | ")}).` +
-      (undoFailed ? " Those sales are still recorded as committed — fix their Qty in Inventory by hand." : " Those sales weren't committed — try again.");
-    lstBanner(msg);
-    alert(msg);
+      (errors.length ? `Inventory Qty didn't save (${errors.join(" | ")}).` : "") +
+      (undo.length ? (undoFailed ? ` ${undo.length} sale(s) are still recorded as committed — fix their Qty in Inventory by hand.` : ` ${undo.length} sale(s) weren't committed — try again.`) : "") +
+      (partial.length ? ` Partly saved — fix the rest by hand: ${partial.map((e) => lstKeyName(e.item)).join("; ")}.` : "");
+    lstBanner(msg.trim());
+    alert(msg.trim());
     return;
   }
   lstToast(
@@ -1470,11 +1563,23 @@ function lstRenderMatch() {
   const where = a.show
     ? `Show · ${a.show.show.name} · Tag ${a.show.tag}${a.show.line ? " · " + a.show.line : ""} · ${a.show.price || "no price"}`
     : `${a.crossRows ? lstPlatformLabel(a.crossRows[0].platform) + " · " : ""}${lstMoney(a.price)} · Qty ${a.qty}`;
-  const currentText = !current
+  const currentKey = current ? (current.inventoryId === "ignore" ? "ignore" : lstKey(current.inventorySource, current.inventoryId)) : a.crossRows ? lstCrossKey(a.crossRows[0]) : "";
+  const currentText = !currentKey
     ? ""
-    : current.inventoryId === "ignore"
+    : currentKey === "ignore"
       ? "Currently: not an inventory item"
-      : `Currently: ${lstInvFor(current) ? lstItemName(lstInvFor(current)) : "an Inventory item that no longer exists"}`;
+      : `Currently: ${lstKeyName(currentKey) || "an Inventory item that no longer exists"}`;
+  const m = lstModal;
+  const bundleHtml = m.bundle
+    ? `<div class="lst-bundle">
+  <div class="lst-pick-heading"><strong>Bundle</strong> — tap every Inventory item in this listing (tap one twice if the bundle has 2 of it).</div>
+  ${m.bundle.length ? m.bundle.map((k, i) => `<div class="lst-pending-row"><span class="lst-pending-name">${escapeHtml(lstKeyName(k) || "(missing item)")}</span><button class="lst-chip-btn" data-act="bundle-remove" data-idx="${i}" title="Remove">✕</button></div>`).join("") : ""}
+  <div class="lst-modal-actions">
+    <button class="secondary-btn" data-act="bundle-cancel">Cancel bundle</button>
+    <button class="primary-btn" data-act="bundle-save"${m.bundle.length >= 2 ? "" : " disabled"}>Save bundle (${m.bundle.length} item${m.bundle.length === 1 ? "" : "s"})</button>
+  </div>
+</div>`
+    : "";
   document.getElementById("lst-modal-body").innerHTML = `
 <h3 class="lst-modal-title">Match to Inventory${queue.length > 1 ? ` <span class="lst-muted">${index + 1} of ${queue.length}</span>` : ""}</h3>
 <div class="lst-match-src">
@@ -1484,12 +1589,18 @@ function lstRenderMatch() {
     <div class="bl-row-sub">${escapeHtml(where)}${currentText ? " · " + escapeHtml(currentText) : ""}</div>
   </div>
 </div>
+${bundleHtml}
 <input type="text" id="lst-match-search" class="toolbar-input lst-modal-search" placeholder="Search Inventory (name, #, line, owner)…" value="${escapeHtml(lstModal.search)}" />
 <div id="lst-match-results" class="lst-pick-list"></div>
-<div class="lst-modal-actions">
+${
+  m.bundle
+    ? ""
+    : `<div class="lst-modal-actions">
+  <button class="secondary-btn" data-act="bundle-start" title="Several Inventory items sold together in one listing">Bundle…</button>
   <button class="secondary-btn" data-act="ignore">Not an inventory item</button>
   ${queue.length > 1 ? `<button class="secondary-btn" data-act="skip">Skip for now</button>` : ""}
-</div>`;
+</div>`
+}`;
   const input = document.getElementById("lst-match-search");
   input.addEventListener("input", () => {
     lstModal.search = input.value;
@@ -1507,38 +1618,29 @@ function lstRenderMatchResults() {
     heading + (list.length ? list.map((i) => lstPickButton(i)).join("") : q ? `<div class="lst-pick-heading">Nothing in Inventory matches.</div>` : "");
 }
 
-// key: an item's lstKey, or "ignore" for "not an inventory item".
+function lstCrossKey(c) {
+  return c.inventoryId === "ignore" ? "ignore" : c.inventoryId ? lstKey(c.inventorySource, c.inventoryId) : "";
+}
+
+// key: an item's lstKey, a bundle key, or "ignore" for "not an inventory item".
 async function lstSaveMatch(key) {
   const a = lstModal.queue[lstModal.index];
-  const item = key === "ignore" ? null : lstInvById.get(key);
-  if (key !== "ignore" && !item) return;
+  if (key !== "ignore" && !lstIsBundleKey(key) && !lstInvById.get(key)) return;
+  const fields = lstLinkFields(key);
   if (a.crossRows) {
-    const fields = item ? { inventoryId: String(item.id), inventorySource: item.source } : { inventoryId: "ignore", inventorySource: "" };
     await lstApi({ action: "updateCrossListings", rows: a.crossRows.map((c) => ({ id: c.id, fields })) });
     a.crossRows.forEach((c) => Object.assign(c, fields));
     lstNextMatch();
     return;
   }
   if (a.show) {
-    const match = {
-      source: "show",
-      sourceKey: lstShowMatchKey(a.show),
-      inventoryId: item ? String(item.id) : "ignore",
-      inventorySource: item ? item.source : "",
-      title: `${a.show.tag} ${a.show.name}`,
-    };
+    const match = { source: "show", sourceKey: lstShowMatchKey(a.show), ...fields, title: `${a.show.tag} ${a.show.name}` };
     await lstApi({ action: "saveMatches", matches: [match] });
     lstShowMatches.set(match.sourceKey, match);
     lstNextMatch();
     return;
   }
-  const match = {
-    source: "ebay",
-    sourceKey: a.itemId,
-    inventoryId: item ? String(item.id) : "ignore",
-    inventorySource: item ? item.source : "",
-    title: a.title,
-  };
+  const match = { source: "ebay", sourceKey: a.itemId, ...fields, title: a.title };
   await lstApi({ action: "saveMatches", matches: [match] });
   lstMatches.set(a.itemId, match);
   lstNextMatch();
@@ -1547,6 +1649,7 @@ async function lstSaveMatch(key) {
 function lstNextMatch() {
   lstModal.index += 1;
   lstModal.search = "";
+  lstModal.bundle = null;
   if (lstModal.index >= lstModal.queue.length) {
     lstCloseModal();
     return;
@@ -1699,7 +1802,9 @@ ${m.rows
   <input type="checkbox" class="lst-copy-check" data-idx="${idx}"${r.checked ? " checked" : ""} />
   <span class="lst-copy-main">
     <span class="lst-pick-name">${escapeHtml(r.item ? lstItemName(r.item) : r.a.title)}</span>
-    <span class="lst-pick-sub">${lstMoney(r.a.price)}${r.a.qty > 1 ? " · Qty " + r.a.qty : ""}${r.item ? "" : r.match === null && lstMatches.has(r.a.itemId) ? " · not an inventory item" : " · no Inventory link"}${r.copied ? ` · <strong>already on ${label}</strong>` : ""}</span>
+    <span class="lst-pick-sub">${lstMoney(r.a.price)}${r.a.qty > 1 ? " · Qty " + r.a.qty : ""}${
+      r.item ? "" : r.match && r.match.inventorySource === "bundle" ? " · bundle" : r.match === null && lstMatches.has(r.a.itemId) ? " · not an inventory item" : " · no Inventory link"
+    }${r.copied ? ` · <strong>already on ${label}</strong>` : ""}</span>
   </span>
 </label>`
   )
@@ -1743,9 +1848,34 @@ function lstOnModalClick(e) {
   if (!btn || !lstModal || lstBusy) return;
   const act = btn.dataset.act;
   if (lstModal.kind === "match") {
-    if (act === "pick") lstRun(() => lstSaveMatch(btn.dataset.inv));
+    const m = lstModal;
+    if (act === "pick" && m.bundle) {
+      m.bundle.push(btn.dataset.inv);
+      m.search = "";
+      lstRenderMatch();
+      document.getElementById("lst-match-search").focus();
+    } else if (act === "pick") lstRun(() => lstSaveMatch(btn.dataset.inv));
     else if (act === "ignore") lstRun(() => lstSaveMatch("ignore"));
     else if (act === "skip") lstNextMatch();
+    else if (act === "bundle-start") {
+      // Editing an existing bundle starts from its items.
+      const a = m.queue[m.index];
+      const cur = a.crossRows ? lstCrossKey(a.crossRows[0]) : (() => {
+        const x = a.show ? lstShowMatches.get(lstShowMatchKey(a.show)) : lstMatches.get(a.itemId);
+        return x ? lstKey(x.inventorySource, x.inventoryId) : "";
+      })();
+      m.bundle = lstIsBundleKey(cur) ? lstParts(cur).flatMap((p) => Array(p.count).fill(p.key)) : [];
+      lstRenderMatch();
+    } else if (act === "bundle-remove") {
+      m.bundle.splice(Number(btn.dataset.idx), 1);
+      lstRenderMatch();
+    } else if (act === "bundle-cancel") {
+      m.bundle = null;
+      lstRenderMatch();
+    } else if (act === "bundle-save" && m.bundle.length >= 2) {
+      const key = lstBundleKey(m.bundle.slice().sort());
+      lstRun(() => lstSaveMatch(key));
+    }
     return;
   }
   if (lstModal.kind === "batch") {

@@ -187,12 +187,20 @@
         </select>
         <span id="lst-count" class="inv-count"></span>
         <button id="lst-add" class="primary-btn" disabled>+ Add listings</button>
+        <button id="lst-commit" class="secondary-btn" disabled title="Lower Inventory Qty for online sales — you review the list first">Commit sales</button>
         <button id="lst-refresh" class="secondary-btn">↻ Refresh</button>
       </div>
+
+      <div id="lst-pull" class="lst-pull" hidden></div>
 
       <details class="lst-sold-wrap">
         <summary class="lst-heading">Recently sold (<span id="lst-sold-count">0</span>)</summary>
         <div id="lst-sold" class="bl-list"></div>
+      </details>
+
+      <details class="lst-sold-wrap">
+        <summary class="lst-heading">Sales snapshot</summary>
+        <div id="lst-snapshot"></div>
       </details>
 
       <div id="lst-batches" hidden></div>

@@ -49,7 +49,7 @@ A fourth tab, **Booth Layouts**, for planning how the booth is set up per show. 
 
 Not built yet (see the project's `ctt-booth-layout-manager-plan.md`): creating new booth templates in-app, and the overview map.
 
-## Listings (Listings Overview phases 1–3)
+## Listings (Listings Overview phases 1–7)
 
 A fifth tab, **Listings**, showing everything live on eBay, Mercari, Whatnot and FB in one list, grouped by Inventory item, plus every sale from the last 7 / 30 / 90 days.
 
@@ -60,9 +60,16 @@ A fifth tab, **Listings**, showing everything live on eBay, Mercari, Whatnot and
 - **Copy eBay listings to …** (inside + Add listings): for a platform filled by bulk-importing the eBay store. Lists every live eBay listing, all ticked (ones already copied are unticked), and saves each as a listing there with the same Inventory link, price and qty.
 - **Sold** on a Mercari/Whatnot/FB chip marks one unit sold (a qty-2 listing keeps 1 live). **✕** = taken down without selling. Both show an Undo toast; a sold row in "Recently sold" also has **Undo**.
 - **Exported — waiting for you to upload** (phase 3): every FB/Whatnot export from the desktop app shows up here as a batch. **I uploaded this file** opens the batch: ticked listings go live, unticked ones (didn't make it) are removed. Exported cards that weren't filled from the Inventory lookup get a **Match** button (also in Match them).
-- Nothing here changes Inventory Qty — that's the later "Commit" step.
+- **Pull these** (phase 4, red box at the top): an item that sold somewhere and is still listed somewhere for more than what's left. "What's left" = Inventory Qty minus sales Inventory doesn't show yet (uncommitted online sales, show sales whose stock wasn't removed). Mercari/Whatnot/FB chips get **Taken down** / **Qty now N**; eBay ones link to eBay — end or lower them there, then ↻ Refresh.
+- **Show sales** (phase 5): every show in the Sold window is read from the Sales Log (read-only) and listed in Recently sold with its stock status. Each sale is matched to the one Pop with that name under the sale's Tag/Owner; a Tag with no Inventory rows (e.g. VH) counts as not inventory. Shorthand names that don't match exactly go through **Match show sales** once per name. Show stock is still removed with the Sales Log's own button in the app, never here.
+- **Commit sales** (phase 6, toolbar): lowers Inventory Qty for online sales (eBay, Mercari, Whatnot, FB) from Oct 28, 2026 on. A review list shows each sale's item, Owner and Qty before → after; untick anything to leave it. Qty is re-read right before saving, and the Committed tab makes sure a sale is only ever subtracted once, even from two devices. Unmatched sales must be matched first; not-inventory sales are just marked done. Rows in Recently sold that were committed show **stock lowered**.
+- **Sales snapshot** (phase 7, collapsed): items sold and $ per platform, by week or month, grouped Primary / Secondary / Tertiary, for the Sold window. Mercari/Whatnot/FB use the listed price.
 
 **Setup (once):** these need the new "CTT - Listings Overview" sheet. Follow the steps at the top of `listings-overview-apps-script.txt` (project folder), then paste the Web app URL into `js/config.js` as `LISTINGS_SCRIPT_URL` and redeploy. Until then the tab still shows eBay and says the sheet isn't set up.
+
+**Phases 4–7 need two script updates** (same steps each: open the script → paste the new file over it → Save → Deploy → Manage deployments → ✏️ → Version: New version → Deploy; the URL stays the same):
+- `listings-overview-apps-script.txt` → v3 (Commit). Until then the tab says "Commit sales needs the Listings Apps Script updated to v3".
+- `sales-log-apps-script.txt` → v3 (read-only show-sales reading, bound to the CTT - VENDING/SALES LOG sheet). Until then the tab says show sales need the update.
 
 ## What's here vs. not
 

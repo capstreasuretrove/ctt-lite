@@ -22,6 +22,9 @@ const CONFIG = {
   // Listings Overview — its own Apps Script Web App over the "CTT - Listings Overview"
   // sheet (source: listings-overview-apps-script.txt in the project folder).
   LISTINGS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwLQK2KRFzGHm4Q-gUl78WJUyCCH6oyg6DiKvZjh35FEIiURwcO3jzPAzZeXrWeDuDtmg/exec",
+  // Sales Log — the same Apps Script the desktop app's Sales Log uses; the
+  // Listings tab only calls its read-only getSummary / getShowTab (v3).
+  SALES_LOG_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzUTQTOa9vNFu-I1d6bpLiin-xf8Ltil5cshMbNmm0mXeohCpnmBAofM5kV3gbYCxFn/exec",
   AUTH_PASSWORD: "4141",
   // eBay's Trading API needs an auth token and imgBB needs an API key —
   // both entered via the eBay tab's Settings panel and kept only in this

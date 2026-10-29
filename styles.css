@@ -744,3 +744,17 @@ main { padding: 1.25rem; }
 .lst-saved-note { background: #d9f2e3; color: #1a7a44; border-radius: 6px; padding: 0.45rem 0.7rem; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.6rem; }
 .lst-sold-wrap > summary { cursor: pointer; }
 .lst-sold-wrap > summary + .bl-list { margin-bottom: 0.5rem; }
+
+/* Listings Overview — phases 4–7 */
+.lst-pull { background: #fdecec; border: 1px solid #f2c0c0; border-radius: 8px; padding: 0.2rem 0.9rem 0.8rem; margin: 0.8rem 0; }
+.lst-pull .lst-heading { color: var(--red); }
+.lst-pull-note { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+.lst-badge-show { background: #e3f1e8; color: #1a5e36; }
+.lst-snap-seg { max-width: 280px; margin-top: 0.3rem; }
+.lst-snap-wrap { overflow-x: auto; background: white; border: 1px solid var(--border); border-radius: 8px; }
+.lst-snap { border-collapse: collapse; width: 100%; font-size: 0.82rem; white-space: nowrap; }
+.lst-snap th, .lst-snap td { padding: 0.4rem 0.6rem; text-align: left; border-bottom: 1px solid var(--border); }
+.lst-snap thead th { color: var(--navy); font-weight: 700; }
+.lst-snap tbody th, .lst-snap tfoot th { font-weight: 600; color: var(--navy); }
+.lst-snap .lst-snap-tier { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); border-bottom: none; padding-bottom: 0; }
+.lst-snap tfoot td, .lst-snap tfoot th { border-bottom: none; background: #f7f8fc; }

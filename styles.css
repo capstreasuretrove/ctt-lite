@@ -758,3 +758,7 @@ main { padding: 1.25rem; }
 .lst-snap tbody th, .lst-snap tfoot th { font-weight: 600; color: var(--navy); }
 .lst-snap .lst-snap-tier { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); border-bottom: none; padding-bottom: 0; }
 .lst-snap tfoot td, .lst-snap tfoot th { border-bottom: none; background: #f7f8fc; }
+
+/* Listings Overview — bundles */
+.lst-bundle { background: #f7f8fc; border: 1px solid var(--border); border-radius: 8px; padding: 0.2rem 0.7rem 0.6rem; margin-bottom: 0.6rem; }
+.lst-bundle .lst-modal-actions { margin-top: 0.5rem; }
